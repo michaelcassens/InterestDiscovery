@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="University of Montana">
+<meta name="description" content="Explore University of Montana courses across colleges that fit your majors, interests, minors, certificates and career goals.">
+<title>UM Pathfinder — Interdisciplinary Course Explorer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="top">
+  <div class="wrap top-inner">
+    <div>
+      <h1>UM Pathfinder</h1>
+      <p class="tag">Find courses across UM that fit your degree, your interests and where you want to go.</p>
+    </div>
+    <div class="catalog-status" aria-live="polite">
+      <span id="catStatus">Loading catalog…</span>
+      <button type="button" id="refreshBtn" class="btn-ghost">Check catalog for updates</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <aside class="profile" aria-labelledby="profileHeading">
+    <h2 id="profileHeading">Your profile</h2>
+    <p class="hint">Saved only in this browser. Nothing is sent anywhere.</p>
+
+    <section class="field-group" aria-labelledby="progLbl">
+      <h3 id="progLbl">1. Majors, minors &amp; certificates</h3>
+      <label for="progInput">Add a program you're in or considering</label>
+      <div class="row">
+        <input id="progInput" list="progList" autocomplete="off" placeholder="e.g. Psychology B.A.">
+        <button type="button" id="progAdd">Add</button>
+      </div>
+      <datalist id="progList"></datalist>
+      <ul class="chips" id="progChips" aria-label="Selected programs"></ul>
+    </section>
+
+    <section class="field-group" aria-labelledby="intLbl">
+      <h3 id="intLbl">2. Interests</h3>
+      <label for="intInput">What are you curious about? (words or short phrases)</label>
+      <div class="row">
+        <input id="intInput" autocomplete="off" placeholder="e.g. climate, storytelling, AI">
+        <button type="button" id="intAdd">Add</button>
+      </div>
+      <ul class="chips" id="intChips" aria-label="Your interests"></ul>
+      <p class="hint" id="intIdeasLbl">Ideas:</p>
+      <div class="ideas" id="intIdeas" aria-labelledby="intIdeasLbl"></div>
+    </section>
+
+    <section class="field-group" aria-labelledby="takenLbl">
+      <h3 id="takenLbl">3. Courses you've taken</h3>
+      <label for="takenInput">Add a course by code or title</label>
+      <div class="row">
+        <input id="takenInput" list="courseList" autocomplete="off" placeholder="e.g. CSCI 135 or WRIT 101">
+        <button type="button" id="takenAdd">Add</button>
+      </div>
+      <datalist id="courseList"></datalist>
+      <details>
+        <summary>Paste a list instead</summary>
+        <label for="takenPaste">Paste course codes (from a transcript or degree audit)</label>
+        <textarea id="takenPaste" rows="4" placeholder="WRIT 101, M 115, PSYX 100S …"></textarea>
+        <button type="button" id="takenPasteBtn">Add all</button>
+      </details>
+      <ul class="chips" id="takenChips" aria-label="Courses taken"></ul>
+    </section>
+
+    <section class="field-group" aria-labelledby="planLbl">
+      <h3 id="planLbl">Saved to my plan</h3>
+      <ul class="chips" id="planChips" aria-label="Planned courses"></ul>
+      <p class="hint" id="planEmpty">Use “Save to plan” on any suggested course.</p>
+    </section>
+
+    <div class="profile-actions">
+      <button type="button" id="exportBtn" class="btn-ghost">Download my plan</button>
+      <label class="btn-ghost file-btn">Load a plan<input type="file" id="importFile" accept="application/json"></label>
+      <button type="button" id="resetBtn" class="btn-ghost">Start over</button>
+    </div>
+    <p class="msg" id="profileMsg" role="status" aria-live="polite"></p>
+  </aside>
+
+  <main id="main" tabindex="-1">
+    <div role="tablist" aria-label="Pathfinder views" class="tabs" id="tabs">
+      <button role="tab" id="tab-suggest" aria-controls="panel-suggest" aria-selected="true">Suggested courses</button>
+      <button role="tab" id="tab-reqs" aria-controls="panel-reqs" aria-selected="false" tabindex="-1">My requirements</button>
+      <button role="tab" id="tab-minors" aria-controls="panel-minors" aria-selected="false" tabindex="-1">Minors &amp; certificates</button>
+      <button role="tab" id="tab-careers" aria-controls="panel-careers" aria-selected="false" tabindex="-1">Outcomes &amp; careers</button>
+      <button role="tab" id="tab-why" aria-controls="panel-why" aria-selected="false" tabindex="-1">Why go interdisciplinary?</button>
+    </div>
+
+    <section role="tabpanel" id="panel-suggest" aria-labelledby="tab-suggest" tabindex="0">
+      <h2>Suggested courses</h2>
+      <p class="lead" id="suggestLead"></p>
+      <form class="filters" id="filters" onsubmit="return false">
+        <div class="filter-search">
+          <label for="q">Search the full catalog</label>
+          <input id="q" type="search" placeholder="Any topic, e.g. podcasting, fire ecology, ethics of AI">
+        </div>
+        <fieldset>
+          <legend>Show</legend>
+          <label><input type="checkbox" id="fOutside"> Outside my departments only</label>
+          <label><input type="checkbox" id="fPrereq"> Prerequisites met only</label>
+          <label><input type="checkbox" id="fGenEd"> Gen Ed courses only</label>
+          <label><input type="checkbox" id="fFeeds"> Counts toward something</label>
+        </fieldset>
+        <div>
+          <label for="fLevel">Level</label>
+          <select id="fLevel">
+            <option value="all">All undergraduate</option>
+            <option value="lower">100–200 (lower division)</option>
+            <option value="upper">300–400 (upper division)</option>
+          </select>
+        </div>
+      </form>
+      <p class="count" id="resultCount" role="status" aria-live="polite"></p>
+      <ol class="results" id="results"></ol>
+      <button type="button" id="moreBtn" class="btn-ghost" hidden>Show more</button>
+    </section>
+
+    <section role="tabpanel" id="panel-reqs" aria-labelledby="tab-reqs" tabindex="0" hidden>
+      <h2>My requirements</h2>
+      <p class="lead">Requirements as published in the official catalog. Your degree audit (and your advisor) are the final word — use this to see the shape of your degree and where you have choices.</p>
+      <div id="reqs"></div>
+    </section>
+
+    <section role="tabpanel" id="panel-minors" aria-labelledby="tab-minors" tabindex="0" hidden>
+      <h2>Minors &amp; certificates you're building toward</h2>
+      <p class="lead">Ranked by how many listed courses you've taken or planned, plus how well the program fits your interests. Progress is approximate — programs have rules (e.g., “choose 2 of”) that only a degree audit applies exactly.</p>
+      <div id="minors"></div>
+    </section>
+
+    <section role="tabpanel" id="panel-careers" aria-labelledby="tab-careers" tabindex="0" hidden>
+      <h2>Learning outcomes &amp; career pathways</h2>
+      <p class="lead">Built from the courses you've taken and planned, your programs and your interests. These are directions to explore, not guarantees of qualification.</p>
+      <div class="loc">
+        <label for="loc">Job search location</label>
+        <input id="loc" value="Montana">
+      </div>
+      <div id="careers"></div>
+    </section>
+
+    <section role="tabpanel" id="panel-why" aria-labelledby="tab-why" tabindex="0" hidden>
+      <h2>Why interdisciplinary and cross-disciplinary courses matter</h2>
+      <div id="whyPersonal"></div>
+      <div id="why"></div>
+    </section>
+  </main>
+</div>
+
+<footer class="wrap foot">
+  <p>Course and program data are read directly from the official <a href="https://catalog.umt.edu/" id="srcLink">University of Montana Academic Catalog</a> and refreshed automatically. Suggestions are exploratory; confirm substitutions and requirements with your advisor and degree audit.</p>
+</footer>
+
+<script src="knowledge.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
