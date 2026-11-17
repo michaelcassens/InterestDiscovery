@@ -1,0 +1,14 @@
+{
+  "name": "um-pathfinder",
+  "version": "1.0.0",
+  "description": "Explore University of Montana courses across colleges by major, interests, minors, certificates and careers.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "crawl": "node catalog.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

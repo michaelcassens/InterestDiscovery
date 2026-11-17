@@ -477,21 +477,35 @@ $('importFile').onchange = async e => {
 };
 
 // ---------------- catalog loading / refresh ----------------
+// API base: '' when the page is served by server.js itself; the Render URL when
+// the page is hosted on GitHub Pages (set in config.js).
+const API = (window.PATHFINDER_API || '').replace(/\/+$/, '');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function status() {
-  const s = await (await fetch('/api/status')).json();
+  let s = null;
+  // Free cloud servers sleep when idle; keep trying while it wakes up (~1 min).
+  for (let i = 0; !s; i++) {
+    try { const r = await fetch(API + '/api/status'); if (r.ok) s = await r.json(); } catch { /* still waking */ }
+    if (!s) {
+      if (i > 60) throw new Error('the catalog server is not responding. Try again in a few minutes.');
+      $('catStatus').textContent = 'Waking up the catalog server — this can take up to a minute…';
+      await sleep(3000);
+    }
+  }
   if (s.crawl.running) $('catStatus').textContent = `Updating from catalog.umt.edu: ${s.crawl.phase} (${s.crawl.done}/${s.crawl.total})`;
   else if (s.fetchedAt) $('catStatus').textContent = `${s.catalogYear || 'UM Catalog'} · ${s.courses.toLocaleString()} courses, ${s.programs} programs · checked ${new Date(s.fetchedAt).toLocaleDateString()}`;
   return s;
 }
 $('refreshBtn').onclick = async () => {
-  await fetch('/api/refresh', { method: 'POST' });
+  const r = await fetch(API + '/api/refresh', { method: 'POST' }).then(x => x.json()).catch(() => ({}));
+  if (!r.started) { $('catStatus').textContent = r.message || 'Could not start an update right now.'; return; }
   $('refreshBtn').disabled = true;
   const poll = setInterval(async () => { const s = await status(); if (!s.crawl.running) { clearInterval(poll); $('refreshBtn').disabled = false; await load(); } }, 2000);
 };
 async function load() {
   let s = await status();
-  while (!s.fetchedAt) { await new Promise(r => setTimeout(r, 2500)); s = await status(); }
-  D = await (await fetch('/api/catalog')).json();
+  while (!s.fetchedAt) { await sleep(2500); s = await status(); }
+  D = await (await fetch(API + '/api/catalog')).json();
   byCode.clear(); byBase.clear(); progById.clear(); courseToProgs.clear(); IDF = new Map(); VEC = new Map();
   index();
   S.programs = S.programs.filter(id => progById.has(id));
