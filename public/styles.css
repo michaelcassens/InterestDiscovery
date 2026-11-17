@@ -98,7 +98,8 @@ main:focus { outline: none; }
 .role { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
 .role h4 { margin: 0 0 4px; }
 .role .links { font-size: .86rem; display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.loc { max-width: 280px; margin-bottom: 14px; }
+.loc { max-width: 440px; margin-bottom: 14px; }
+.loc .msg { margin: 6px 0 0; }
 .why-item { margin-bottom: 14px; }
 .why-item h3 { margin: 0 0 4px; color: var(--maroon-dark); font-size: 1.05rem; }
 .callout { background: var(--wheat); border-left: 5px solid var(--maroon); padding: 12px 16px; border-radius: 6px; margin-bottom: 18px; }

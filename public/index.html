@@ -135,10 +135,14 @@
     <section role="tabpanel" id="panel-careers" aria-labelledby="tab-careers" tabindex="0" hidden>
       <h2>Learning outcomes &amp; career pathways</h2>
       <p class="lead">Built from the courses you've taken and planned, your programs and your interests. These are directions to explore, not guarantees of qualification.</p>
-      <div class="loc">
+      <form class="loc" id="locForm">
         <label for="loc">Job search location</label>
-        <input id="loc" value="Montana">
-      </div>
+        <div class="row">
+          <input id="loc" autocomplete="off" placeholder="City, state, or Remote" aria-describedby="locStatus">
+          <button type="submit">Update job links</button>
+        </div>
+        <p class="msg" id="locStatus" role="status" aria-live="polite"></p>
+      </form>
       <div id="careers"></div>
     </section>
 

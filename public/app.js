@@ -465,16 +465,23 @@ let qTimer; $('q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout((
 $('fLevel').value = S.filters.level || 'all';
 $('fLevel').onchange = () => { S.filters.level = $('fLevel').value; save(); renderSuggestions(); };
 $('moreBtn').onclick = () => { shown += 30; renderSuggestions(); };
-// Update job links as the student types (renderCareers doesn't touch this input).
-let locTimer; $('loc').value = S.location;
-$('loc').oninput = () => { clearTimeout(locTimer); locTimer = setTimeout(() => { S.location = $('loc').value; save(); renderCareers(); }, 300); };
-$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); renderAll(); say('Profile cleared.'); } };
+// Job links change only when the student presses the button (or Enter), with a confirmation.
+const locMsg = l => l ? `Job links now search ${l}.` : 'Job links now search everywhere.';
+function syncLoc() { $('loc').value = S.location || ''; $('locStatus').textContent = locMsg((S.location || '').trim()); }
+syncLoc();
+$('locForm').onsubmit = e => {
+  e.preventDefault();
+  S.location = $('loc').value.trim(); $('loc').value = S.location;
+  save(); renderCareers();
+  $('locStatus').textContent = locMsg(S.location);
+};
+$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); say('Profile cleared.'); } };
 $('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify({ ...S, exportedAt: new Date().toISOString(), catalog: D.catalogYear }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'um-pathfinder-plan.json'; a.click(); URL.revokeObjectURL(a.href);
 };
 $('importFile').onchange = async e => {
-  try { const j = JSON.parse(await e.target.files[0].text()); S = Object.assign(blank(), j); renderAll(); say('Plan loaded.'); }
+  try { const j = JSON.parse(await e.target.files[0].text()); S = Object.assign(blank(), j); syncLoc(); renderAll(); say('Plan loaded.'); }
   catch { say('That file isn’t a Pathfinder plan.'); }
   e.target.value = '';
 };
