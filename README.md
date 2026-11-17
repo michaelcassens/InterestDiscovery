@@ -23,7 +23,8 @@ The web page and the catalog server are hosted separately:
 
 - `public/config.js` tells the page where the API is. If your Render service gets a different address, change it there.
 - The server only accepts requests from the pages listed in `ALLOWED_ORIGINS`, which is set in `render.yaml`.
-- Every Monday, `.github/workflows/refresh-catalog.yml` re-reads the catalog and commits a fresh `data/catalog.json`. Render redeploys automatically when that happens.
+- Every Monday, `.github/workflows/refresh-catalog.yml` re-reads the catalog and commits a fresh `data/catalog.json`.
+- The Render service was created from the public repo URL, so Render does **not** redeploy automatically when the repo changes. Click **Manual Deploy** in Render to pick up new code. The server doesn't depend on redeploys for fresh data: when its copy is more than 7 days old, it keeps serving that copy and re-reads catalog.umt.edu in the background.
 - Render's free plan puts the server to sleep after 15 minutes without visitors. The first visitor after that waits about a minute, and the page shows a "waking up" message while they wait.
 
 **Updating from the parent `Claude Code Projects` folder:** the weekly job commits to GitHub, so pull its changes in before you push yours:
