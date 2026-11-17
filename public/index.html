@@ -95,7 +95,7 @@
   <ol class="how">
     <li><strong>Tell it about you.</strong> Add your major, a few interests, and the courses you’ve taken, in the left-hand column or with the guided setup. Each one is optional.</li>
     <li><strong>Browse suggestions.</strong> Pathfinder reads every course description in the official UM catalog and ranks the ones that match your interests and build on what you’ve taken.</li>
-    <li><strong>Save what you like.</strong> Click “Save to plan” on a course. Then check the other tabs to see your degree requirements, the minors and certificates you’re building toward, and the careers they lead to.</li>
+    <li><strong>Save what you like.</strong> Click “Save to plan” on a course. Then check the other tabs: <em>My degree</em>, <em>Minors &amp; certificates</em> and <em>Skills &amp; careers</em>.</li>
   </ol>
   <h3>Common questions</h3>
   <dl class="faq">
@@ -184,15 +184,15 @@
 
   <main id="main" tabindex="-1">
     <div role="tablist" aria-label="Pathfinder views" class="tabs" id="tabs">
-      <button role="tab" id="tab-suggest" aria-controls="panel-suggest" aria-selected="true">Suggested courses</button>
-      <button role="tab" id="tab-reqs" aria-controls="panel-reqs" aria-selected="false" tabindex="-1">My requirements</button>
+      <button role="tab" id="tab-suggest" aria-controls="panel-suggest" aria-selected="true">Course ideas</button>
+      <button role="tab" id="tab-reqs" aria-controls="panel-reqs" aria-selected="false" tabindex="-1">My degree</button>
       <button role="tab" id="tab-minors" aria-controls="panel-minors" aria-selected="false" tabindex="-1">Minors &amp; certificates</button>
-      <button role="tab" id="tab-careers" aria-controls="panel-careers" aria-selected="false" tabindex="-1">Outcomes &amp; careers</button>
-      <button role="tab" id="tab-why" aria-controls="panel-why" aria-selected="false" tabindex="-1">Why go interdisciplinary?</button>
+      <button role="tab" id="tab-careers" aria-controls="panel-careers" aria-selected="false" tabindex="-1">Skills &amp; careers</button>
+      <button role="tab" id="tab-why" aria-controls="panel-why" aria-selected="false" tabindex="-1">Why mix fields?</button>
     </div>
 
     <section role="tabpanel" id="panel-suggest" aria-labelledby="tab-suggest" tabindex="0">
-      <h2>Suggested courses</h2>
+      <h2>Course ideas for you</h2>
       <p class="lead" id="suggestLead"></p>
       <details class="legend">
         <summary>What do the colored labels mean?</summary>
@@ -201,15 +201,18 @@
           <dt><span class="badge b-blue">Blue</span></dt><dd>Counts toward a minor or certificate you could add.</dd>
           <dt><span class="badge b-amber">Amber</span></dt><dd>Worth asking your advisor about, such as a possible substitution or a prerequisite Pathfinder can’t check.</dd>
           <dt><span class="badge b-red">Red</span></dt><dd>You need a prerequisite first.</dd>
-          <dt><span class="badge b-plain">Tan</span></dt><dd>Background: Gen Ed category, or a department outside your major.</dd>
+          <dt><span class="badge b-plain">Tan</span></dt><dd>The Gen Ed requirement the course fills.</dd>
         </dl>
         <p class="hint">Every label also says what it means in words, so you never have to rely on the color alone.</p>
       </details>
       <form class="filters" id="filters" onsubmit="return false">
         <div class="filter-search">
-          <label for="q">Search the full catalog</label>
+          <label for="q">Search every UM course</label>
           <input id="q" type="search" placeholder="Any topic, e.g. podcasting, fire ecology, ethics of AI">
         </div>
+        <details class="narrow" id="narrow">
+        <summary>Narrow the list<span id="filterCount"></span></summary>
+        <div class="narrow-body">
         <fieldset>
           <legend>Show</legend>
           <label><input type="checkbox" id="fOutside"> Outside my departments only</label>
@@ -225,6 +228,8 @@
             <option value="upper">300–400 (upper division)</option>
           </select>
         </div>
+        </div>
+        </details>
       </form>
       <p class="count" id="resultCount" role="status" aria-live="polite"></p>
       <ol class="results" id="results"></ol>
@@ -232,20 +237,20 @@
     </section>
 
     <section role="tabpanel" id="panel-reqs" aria-labelledby="tab-reqs" tabindex="0" hidden>
-      <h2>My requirements</h2>
-      <p class="lead">Requirements as published in the official catalog. Your degree audit (and your advisor) are the final word — use this to see the shape of your degree and where you have choices.</p>
+      <h2>My degree requirements</h2>
+      <p class="lead">What your program requires, from the official catalog, with your finished courses checked off. Use this to see where you have choices. Your degree audit and advisor have the final word.</p>
       <div id="reqs"></div>
     </section>
 
     <section role="tabpanel" id="panel-minors" aria-labelledby="tab-minors" tabindex="0" hidden>
-      <h2>Minors &amp; certificates you're building toward</h2>
-      <p class="lead">Ranked by how many listed courses you've taken or planned, plus how well the program fits your interests. Progress is approximate — programs have rules (e.g., “choose 2 of”) that only a degree audit applies exactly.</p>
+      <h2>Minors &amp; certificates you’re closest to</h2>
+      <p class="lead">The ones at the top use courses you’ve already taken or planned, and match your interests. Progress is an estimate, because some programs have rules like “choose 2 of” that only your degree audit applies exactly.</p>
       <div id="minors"></div>
     </section>
 
     <section role="tabpanel" id="panel-careers" aria-labelledby="tab-careers" tabindex="0" hidden>
-      <h2>Learning outcomes &amp; career pathways</h2>
-      <p class="lead">Built from the courses you've taken and planned, your programs and your interests. These are directions to explore, not guarantees of qualification.</p>
+      <h2>Skills you’re building &amp; careers they lead to</h2>
+      <p class="lead">Based on your courses, programs and interests. These are directions to explore, not a promise that you qualify.</p>
       <form class="loc" id="locForm">
         <label for="loc">Job search location</label>
         <div class="row">
@@ -258,7 +263,7 @@
     </section>
 
     <section role="tabpanel" id="panel-why" aria-labelledby="tab-why" tabindex="0" hidden>
-      <h2>Why interdisciplinary and cross-disciplinary courses matter</h2>
+      <h2>Why taking courses in other fields pays off</h2>
       <div id="whyPersonal"></div>
       <div id="why"></div>
     </section>

@@ -211,11 +211,33 @@ function recommend() {
 
 // ---------------- rendering: suggestions ----------------
 function badge(text, cls) { return `<li class="badge ${cls}">${esc(text)}</li>`; }
+// Short label for the card; the full prerequisite text goes in "More details".
 function preBadge(pre) {
-  if (pre.state === 'none') return badge('No prerequisites listed', 'b-green');
+  if (pre.state === 'none') return badge('No prerequisites', 'b-green');
   if (pre.state === 'met') return badge('Prerequisites met', 'b-green');
-  if (pre.state === 'check') return badge('Prereq needs a check: ' + pre.manual.join('; '), 'b-amber');
-  return badge('Prerequisite needed: ' + pre.missing.join('; '), 'b-red');
+  if (pre.state === 'check') return badge('Check prerequisites', 'b-amber');
+  const codes = [...new Set(pre.missing.flatMap(cl => [...cl.matchAll(CODE_RE)].map(m => `${m[1]} ${m[2]}`)))];
+  return badge(codes.length && codes.length <= 2 ? `Take ${codes.join(' or ')} first` : 'Prerequisite needed first', 'b-red');
+}
+// A short preview of what the course is about: skip rule sentences ("Restricted to…",
+// "Prereq…", "Offered…") and keep sentences until about 80–220 characters.
+const RULE_SENT = /^(restricted|open (only )?to|prereq|coreq|offered|same as|cross-?listed|level:|credit|repeatable|may be repeated|students (must|may)|this course (is|may) (restricted|open|repeated)|requires|recommended|consent|graded)/i;
+function shortDesc(d) {
+  // Drop "Prereq., M 115 or STAT 216." clauses first (their periods confuse sentence splitting).
+  const body = d.replace(/\b(?:Prereq|Coreq)[a-z]*\.?,?:?\s*[^.]*\.?/gi, ' ').replace(/\s+/g, ' ').trim() || d;
+  const sents = body.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [body];
+  let out = '';
+  for (const s of sents.map(x => x.trim()).filter(x => /^[A-Z0-9"“(]/.test(x) && !RULE_SENT.test(x))) {
+    if (out && (out + ' ' + s).length > 220) break;
+    out = out ? out + ' ' + s : s;
+    if (out.length >= 80) break;
+  }
+  if (!out) out = body;
+  return out.length > 240 ? out.slice(0, 220).replace(/\s+\S*$/, '') + '…' : out;
+}
+function updateFilterCount() {
+  const f = S.filters, n = ['outside', 'prereq', 'genEd', 'feeds'].filter(k => f[k]).length + (f.level && f.level !== 'all' ? 1 : 0);
+  $('filterCount').textContent = n ? ` (${n} on)` : '';
 }
 function renderSuggestions() {
   const list = recommend();
@@ -226,35 +248,49 @@ function renderSuggestions() {
     : 'These are introductory Gen Ed courses that are good for exploring. For suggestions picked for you, tell Pathfinder a little about yourself. ' +
       '<button type="button" class="btn-small" data-wizard="1">Answer 3 quick questions</button>';
   $('resultCount').textContent = `${list.length.toLocaleString()} matching courses from ${byCode.size.toLocaleString()} in the catalog`;
+  updateFilterCount();
   const plan = plannedBases();
   $('results').innerHTML = list.slice(0, shown).map(r => {
-    const c = r.c; const why = [];
-    if (r.ints.hits.length) why.push(`Matches your interest${r.ints.hits.length > 1 ? 's' : ''}: <strong>${r.ints.hits.map(esc).join(', ')}</strong>`);
-    if (r.nextAfter.length) why.push(`A next step after ${r.nextAfter.map(esc).join(', ')}`);
-    else if (r.histSim > 0.12) why.push('Builds on courses you’ve taken');
-    const b = [];
-    r.inMine.slice(0, 3).forEach(l => b.push(badge(`Counts toward ${l.prog.name}: ${l.group.section}`, 'b-green')));
-    if (r.sub) b.push(badge(`Possible substitution in ${r.sub.p.name} (${r.sub.g.section}) — ask your advisor`, 'b-amber'));
+    const c = r.c;
+    // Why it fits: one short line.
+    const why = [];
+    if (r.ints.hits.length) why.push(`matches <strong>${r.ints.hits.map(esc).join(', ')}</strong>`);
+    if (r.nextAfter.length) why.push(`a next step after ${r.nextAfter.map(esc).join(', ')}`);
+    else if (r.histSim > 0.12) why.push('builds on courses you’ve taken');
     const fs = [...new Map((r.progressFeeds.length ? r.progressFeeds : r.feeds).map(l => [l.prog.id, l.prog])).values()];
-    fs.slice(0, 3).forEach(p => b.push(badge(`Feeds ${typeLabel(p.type)}: ${p.name}`, 'b-blue')));
-    if (fs.length > 3) b.push(badge(`+${fs.length - 3} more minors/certificates`, 'b-blue'));
+    // At most three labels on the card: prerequisites, the most useful "counts toward", Gen Ed.
+    const b = [preBadge(r.pre)];
+    if (r.inMine.length) b.push(badge(`Counts toward your ${r.inMine[0].prog.name}`, 'b-green'));
+    else if (r.sub) b.push(badge('Possible substitution: ask your advisor', 'b-amber'));
+    else if (fs.length) b.push(badge(`Counts toward ${fs[0].name}${fs.length > 1 ? ` + ${fs.length - 1} more` : ''}`, 'b-blue'));
     if (c.genEd.length) b.push(badge('Gen Ed: ' + c.genEd.join(', '), 'b-plain'));
-    if (r.outside) b.push(badge(`Outside your department (${c.subjectName})`, 'b-plain'));
-    if (!r.inMine.length && !fs.length && !c.genEd.length) b.push(badge('Elective — adds breadth to your experience', 'b-plain'));
-    b.push(preBadge(r.pre));
+    // Everything else goes in "More details".
+    const more = [];
+    r.inMine.forEach(l => more.push(`Counts toward <strong>${esc(l.prog.name)}</strong> (${esc(l.group.section)}).`));
+    if (r.sub) more.push(`Possible substitution in <strong>${esc(r.sub.p.name)}</strong> (${esc(r.sub.g.section)}): it closely resembles courses in that group. Ask your advisor whether it can count.`);
+    if (fs.length) more.push(`Also counts toward ${fs.length === 1 ? 'this minor or certificate' : `these ${fs.length} minors and certificates`}: ${fs.slice(0, 8).map(p => esc(p.name)).join('; ')}${fs.length > 8 ? '…' : ''}`.replace(/([^.…])$/, '$1.'));
+    if (!r.inMine.length && !fs.length && !c.genEd.length) more.push('A free elective that adds breadth to your experience.');
+    if (r.outside) more.push(`Taught outside your major’s department, by ${esc(c.subjectName)}.`);
+    if (r.pre.text) more.push(`Prerequisites, as written in the catalog: ${esc(r.pre.text)}`);
     const inPlan = plan.has(c.base);
+    const shortD = shortDesc(c.desc);
     return `<li class="card">
-      <h3><span class="code">${esc(c.code)}</span> — ${esc(c.title)}</h3>
-      <p class="meta">${esc(c.subjectName)} · ${esc(c.credits || '?')} credits${c.offered ? ' · Offered ' + esc(c.offered) : ''}</p>
-      ${why.length ? `<p class="why">${why.join(' · ')}</p>` : ''}
-      <p class="desc">${esc(c.desc.length > 420 ? c.desc.slice(0, 420) + '…' : c.desc)}</p>
-      <ul class="badges" aria-label="How ${esc(c.code)} fits">${b.join('')}</ul>
+      <h3><span class="code">${esc(c.code)}</span> ${esc(c.title)}</h3>
+      <p class="meta">${esc(c.subjectName)} · ${esc(c.credits || '?')} credits${c.offered ? ' · ' + esc(c.offered) : ''}</p>
+      ${why.length ? `<p class="why"><span class="why-label">Why it fits:</span> ${why.join(', ')}</p>` : ''}
+      <p class="desc">${esc(shortD)}</p>
+      <ul class="badges" aria-label="Key facts about ${esc(c.code)}">${b.join('')}</ul>
+      <details class="more">
+        <summary>More details<span class="sr-only"> about ${esc(c.code)}</span></summary>
+        ${shortD !== c.desc ? `<p class="desc">${esc(c.desc)}</p>` : ''}
+        ${more.length ? `<ul class="more-list">${more.map(m => `<li>${m}</li>`).join('')}</ul>` : ''}
+        <p><a href="${esc(c.url)}" target="_blank" rel="noopener">See ${esc(c.code)} in the official catalog<span class="sr-only"> (opens in new tab)</span></a></p>
+      </details>
       <div class="card-actions">
         <button type="button" data-plan="${esc(c.code)}" aria-pressed="${inPlan}">${inPlan ? 'In my plan ✓' : 'Save to plan'}</button>
         <button type="button" class="btn-ghost" data-took="${esc(c.code)}">I’ve taken this</button>
-        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.code)} in the official catalog<span class="sr-only"> (opens in new tab)</span></a>
       </div></li>`;
-  }).join('') || '<li class="empty">No courses match these filters. Try removing a filter or adding a broader interest.</li>';
+  }).join('') || '<li class="empty">No courses match. Try turning off a filter under “Narrow the list”, or add a broader interest.</li>';
   $('moreBtn').hidden = list.length <= shown;
 }
 
@@ -372,7 +408,7 @@ function renderCareers() {
       <div><h3>Learning outcomes you're developing</h3><ul>${top.flatMap(x => x.d.outcomes.map(o => `<li>${esc(o)} <span class="k">(${esc(x.d.name)})</span></li>`)).join('')}</ul></div>
       <div><h3>${combos.length ? 'Hybrid roles your combination opens' : 'Combine areas to open hybrid roles'}</h3>
         ${combos.length ? combos.map(c => `<div class="role"><h4>${c.roles.map(esc).join(' · ')}</h4><p class="rule">${esc(c.why)}</p>${jobLinks(c.roles[0])}</div>`).join('')
-          : '<p class="rule">Your strongest areas don’t yet pair into a recognized hybrid. Try a course from a different area in “Suggested courses”.</p>'}
+          : '<p class="rule">Your strongest areas don’t yet pair into a recognized hybrid. Try a course from a different area in “Course ideas”.</p>'}
       </div>
     </div>
     <h3>Roles to explore in each area</h3>
@@ -565,6 +601,8 @@ let qTimer; $('q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout((
   $(id).checked = !!S.filters[k]; $(id).onchange = () => { S.filters[k] = $(id).checked; shown = 30; save(); renderSuggestions(); };
 });
 $('fLevel').value = S.filters.level || 'all';
+// Keep the filter panel open when filters are already on, so they're never hidden.
+updateFilterCount(); $('narrow').open = $('filterCount').textContent !== '';
 $('fLevel').onchange = () => { S.filters.level = $('fLevel').value; save(); renderSuggestions(); };
 $('moreBtn').onclick = () => { shown += 30; renderSuggestions(); };
 // Job links change only when the student presses the button (or Enter), with a confirmation.
