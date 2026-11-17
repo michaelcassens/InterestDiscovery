@@ -441,9 +441,10 @@ $('tabs').addEventListener('keydown', e => {
 
 // ---------------- events ----------------
 $('progAdd').onclick = addProgram;
-$('progInput').onkeydown = e => e.key === 'Enter' && addProgram();
+// Use statement bodies: an on* handler that returns false cancels the keystroke.
+$('progInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addProgram(); } };
 $('intAdd').onclick = () => addInterest();
-$('intInput').onkeydown = e => e.key === 'Enter' && addInterest();
+$('intInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(); } };
 $('takenAdd').onclick = () => { addTaken($('takenInput').value); $('takenInput').value = ''; };
 $('takenInput').onkeydown = e => { if (e.key === 'Enter') { addTaken($('takenInput').value); $('takenInput').value = ''; } };
 $('takenPasteBtn').onclick = () => { addTaken($('takenPaste').value); $('takenPaste').value = ''; };
@@ -464,7 +465,9 @@ let qTimer; $('q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout((
 $('fLevel').value = S.filters.level || 'all';
 $('fLevel').onchange = () => { S.filters.level = $('fLevel').value; save(); renderSuggestions(); };
 $('moreBtn').onclick = () => { shown += 30; renderSuggestions(); };
-$('loc').value = S.location; $('loc').onchange = () => { S.location = $('loc').value; save(); renderCareers(); };
+// Update job links as the student types (renderCareers doesn't touch this input).
+let locTimer; $('loc').value = S.location;
+$('loc').oninput = () => { clearTimeout(locTimer); locTimer = setTimeout(() => { S.location = $('loc').value; save(); renderCareers(); }, 300); };
 $('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); renderAll(); say('Profile cleared.'); } };
 $('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify({ ...S, exportedAt: new Date().toISOString(), catalog: D.catalogYear }, null, 2)], { type: 'application/json' });
