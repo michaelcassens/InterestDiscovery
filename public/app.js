@@ -40,6 +40,8 @@ const normCode = c => String(c).toUpperCase().replace(/\s+/g, ' ').replace(/^([A
 const baseOf = c => { const m = normCode(c).match(/^([A-Z]{1,5}) ?(\d{3})/); return m ? `${m[1]} ${m[2]}` : normCode(c); };
 const credNum = c => parseFloat((c && c.credits) || '3') || 3;
 const typeBadge = p => new RegExp(p.type === 'major' ? 'B\\.|A\\.|Bachelor|Associate' : p.type, 'i').test(p.name) ? '' : ` <span class="badge b-plain">${typeLabel(p.type)}</span>`;
+// Type word to show after a program name, unless the name already says it ("... Certificate").
+const typeNote = p => new RegExp(p.type, 'i').test(p.name) ? '' : typeLabel(p.type);
 const typeLabel = t => ({ major: 'Major', minor: 'Minor', certificate: 'Certificate', licensure: 'Licensure' }[t] || t);
 
 // ---------------- catalog indexing ----------------
@@ -218,9 +220,11 @@ function preBadge(pre) {
 function renderSuggestions() {
   const list = recommend();
   const hasInput = S.interests.length || S.taken.length || $('q').value.trim();
-  $('suggestLead').textContent = hasInput
-    ? 'Ranked by fit with your interests and course history, then by whether it counts toward your programs, minors or certificates.'
-    : 'Add interests or courses you’ve taken in your profile for personalized suggestions. For now, here are introductory Gen Ed courses that are good for exploring.';
+  $('suggestLead').innerHTML = hasInput
+    ? 'Courses from across UM that match your interests and build on what you’ve taken. The best fits are at the top.' +
+      (S.planned.length ? '' : ' <strong>Tip:</strong> click “Save to plan” on any course you like, then open the other tabs to see what it counts toward.')
+    : 'These are introductory Gen Ed courses that are good for exploring. For suggestions picked for you, tell Pathfinder a little about yourself. ' +
+      '<button type="button" class="btn-small" data-wizard="1">Answer 3 quick questions</button>';
   $('resultCount').textContent = `${list.length.toLocaleString()} matching courses from ${byCode.size.toLocaleString()} in the catalog`;
   const plan = plannedBases();
   $('results').innerHTML = list.slice(0, shown).map(r => {
@@ -254,6 +258,11 @@ function renderSuggestions() {
   $('moreBtn').hidden = list.length <= shown;
 }
 
+// Empty tab: say what will appear here, and offer a button to the setup step that fills it.
+function emptyState(text, actions) {
+  return `<div class="empty"><p>${esc(text)}</p><div class="empty-actions">${actions.map(([n, label]) => `<button type="button" data-wizard="${n}">${esc(label)}</button>`).join('')}</div></div>`;
+}
+
 // ---------------- rendering: requirements ----------------
 function statusFor(codes, done, plan) {
   const bs = codes.map(baseOf);
@@ -264,7 +273,7 @@ function statusFor(codes, done, plan) {
 function renderReqs() {
   const done = takenBases(), plan = plannedBases();
   const progs = myProgs();
-  if (!progs.length) { $('reqs').innerHTML = '<p class="empty">Add a major, minor or certificate in your profile to see its requirements here.</p>'; return; }
+  if (!progs.length) { $('reqs').innerHTML = emptyState('Add your major, minor or certificate, and its requirements from the official catalog will show up here, with the courses you’ve finished checked off.', [[1, 'Add what I study']]); return; }
   $('reqs').innerHTML = progs.map(p => {
     const all = [...p._codes]; const d = all.filter(b => done.has(b)).length;
     let section = '';
@@ -304,7 +313,7 @@ function renderMinors() {
     rows.push({ p, d, pl, credits, fit, fitHits: [...fitHits], score });
   }
   rows.sort((a, b) => b.score - a.score);
-  if (!rows.length) { $('minors').innerHTML = '<p class="empty">Add interests or courses you’ve taken to see minors and certificates that fit.</p>'; return; }
+  if (!rows.length) { $('minors').innerHTML = emptyState('Many students are closer to a minor or certificate than they think. Add your interests or the courses you’ve taken, and Pathfinder will show which ones you’re building toward.', [[2, 'Add my interests'], [3, 'Add courses I’ve taken']]); return; }
   $('minors').innerHTML = rows.slice(0, 15).map(r => {
     const p = r.p; const pct = p._hours ? Math.min(100, Math.round(100 * r.credits / p._hours)) : null;
     const remaining = [...p._codes].filter(b => !done.has(b) && !plan.has(b)).map(b => byBase.get(b)).filter(Boolean);
@@ -351,7 +360,7 @@ function jobLinks(role) {
 }
 function renderCareers() {
   const prof = domainProfile();
-  if (!prof.length) { $('careers').innerHTML = '<p class="empty">Add programs, interests or courses to see the learning outcomes and careers your path is building toward.</p>'; return; }
+  if (!prof.length) { $('careers').innerHTML = emptyState('Tell Pathfinder what you study or what you’re curious about. It will show the skills you’re building, the careers they lead to, and links to live job listings.', [[1, 'Get started']]); return; }
   const top = prof.slice(0, 4); const ids = new Set(top.map(x => x.d.id));
   const combos = K.combos.filter(c => ids.has(c.a) && ids.has(c.b));
   $('careers').innerHTML = `
@@ -389,31 +398,61 @@ function chip(label, key, kind, extra) {
   return `<li><span>${esc(label)}${extra ? ` <span class="k">${esc(extra)}</span>` : ''}</span><button type="button" data-remove="${kind}" data-key="${esc(key)}" aria-label="Remove ${esc(label)}">×</button></li>`;
 }
 function renderProfile() {
-  $('progChips').innerHTML = myProgs().map(p => chip(p.name, p.id, 'programs', typeLabel(p.type))).join('');
+  $('progChips').innerHTML = myProgs().map(p => chip(p.name, p.id, 'programs', typeNote(p))).join('');
   $('intChips').innerHTML = S.interests.map(i => chip(i, i, 'interests')).join('');
   $('takenChips').innerHTML = S.taken.map(c => chip(c, c, 'taken', findCourse(c)?.title)).join('');
   $('planChips').innerHTML = S.planned.map(c => chip(c, c, 'planned', findCourse(c)?.title)).join('');
   $('planEmpty').hidden = S.planned.length > 0;
-  const ideas = ['climate', 'games', 'data', 'storytelling', 'health', 'indigenous', 'music', 'business', 'wildlife', 'AI', 'justice', 'design', 'teaching', 'outdoors', 'film'];
-  $('intIdeas').innerHTML = ideas.filter(i => !S.interests.includes(i)).slice(0, 10).map(i => `<button type="button" data-idea="${esc(i)}">+ ${esc(i)}</button>`).join('');
+  $('intIdeas').innerHTML = IDEAS.filter(i => !S.interests.includes(i)).slice(0, 10).map(i => `<button type="button" data-idea="${esc(i)}">+ ${esc(i)}</button>`).join('');
+  renderWizard();
 }
-function renderAll() { save(); renderProfile(); renderSuggestions(); renderReqs(); renderMinors(); renderCareers(); renderWhy(); }
-function say(msg) { $('profileMsg').textContent = msg; }
+const IDEAS = ['climate', 'games', 'data', 'storytelling', 'health', 'indigenous', 'music', 'business', 'wildlife', 'AI', 'justice', 'design',
+  'teaching', 'outdoors', 'film', 'psychology', 'writing', 'art', 'law', 'science', 'sports', 'travel', 'helping people', 'technology'];
+function renderAll() {
+  save(); renderProfile();
+  if (!D) return;           // catalog still loading; the rest renders once it arrives
+  renderSuggestions(); renderReqs(); renderMinors(); renderCareers(); renderWhy();
+}
+const wizardOpen = () => !$('wizard').hidden;
+function say(msg) { $(wizardOpen() ? 'wMsg' : 'profileMsg').textContent = msg; }
+const notReady = () => D ? false : (say('The course catalog is still loading. Try again in a moment.'), true);
 
-function addProgram() {
-  const v = $('progInput').value.trim().toLowerCase(); if (!v) return;
-  const p = D.programs.find(p => `${p.name} (${typeLabel(p.type)})`.toLowerCase() === v) || D.programs.find(p => p.name.toLowerCase() === v)
-    || D.programs.find(p => p.name.toLowerCase().includes(v));
-  if (!p) return say(`No program matching “${$('progInput').value}”. Pick one from the list.`);
+// Several programs can match what a student types ("biology" → 10+). Then show them as
+// buttons to choose from instead of silently picking the first.
+const pickBox = inp => $(inp.id === 'wProg' ? 'wProgPick' : 'progPick');
+function addProgramId(id, inp) {
+  const p = progById.get(id); if (!p) return;
   if (!S.programs.includes(p.id)) S.programs.push(p.id);
-  $('progInput').value = ''; say(`Added ${p.name}.`); renderAll();
+  if (inp) { inp.value = ''; pickBox(inp).innerHTML = ''; }
+  say(`Added ${p.name}.`); renderAll();
 }
-function addInterest(v) {
-  v = (v ?? $('intInput').value).trim(); if (!v) return;
+function addProgram(inp = $('progInput')) {
+  const raw = inp.value.trim(), v = raw.toLowerCase(); if (!v || notReady()) return;
+  const exact = D.programs.find(p => `${p.name} (${typeLabel(p.type)})`.toLowerCase() === v) || D.programs.find(p => p.name.toLowerCase() === v);
+  if (exact) return addProgramId(exact.id, inp);
+  const words = v.split(/\s+/);
+  const matches = D.programs.filter(p => words.every(w => p.name.toLowerCase().includes(w)) && !S.programs.includes(p.id))
+    .sort((a, b) => (a.type === 'major' ? 0 : 1) - (b.type === 'major' ? 0 : 1) || a.name.localeCompare(b.name));
+  if (matches.length === 1) return addProgramId(matches[0].id, inp);
+  if (!matches.length) { pickBox(inp).innerHTML = ''; return say(`No program matches “${raw}”. Try fewer letters, like “bio” or “art”.`); }
+  const box = pickBox(inp);
+  box.innerHTML = `<p class="pick-q">${matches.length} programs match “${esc(raw)}”. Which one?</p><div class="pick-list">` +
+    matches.slice(0, 12).map(p => `<button type="button" class="btn-ghost" data-addprog="${esc(p.id)}" data-for="${inp.id}">${esc(p.name)} <span class="k">${typeNote(p)}</span></button>`).join('') +
+    `</div>${matches.length > 12 ? `<p class="hint">Showing 12 of ${matches.length}. Type more of the name to narrow it down.</p>` : ''}`;
+  say(`${matches.length} programs match. Choose one from the buttons below the box.`);
+  box.querySelector('button').focus();
+}
+function addInterest(v, inp = $('intInput')) {
+  v = (v ?? inp.value).trim(); if (!v) return;
   v.split(/,\s*/).forEach(x => x && !S.interests.includes(x) && S.interests.push(x));
-  $('intInput').value = ''; shown = 30; renderAll();
+  inp.value = ''; shown = 30; say(`Added “${v}”.`); renderAll();
+}
+function toggleInterest(v) {
+  if (S.interests.includes(v)) { S.interests = S.interests.filter(x => x !== v); say(`Removed “${v}”.`); renderAll(); }
+  else addInterest(v);
 }
 function addTaken(raw) {
+  if (notReady()) return;
   const codes = [...String(raw).toUpperCase().matchAll(/\b([A-Z]{1,5})\s?(\d{3}[A-Z]{0,2})\b/g)].map(m => `${m[1]} ${m[2]}`);
   let added = 0, unknown = [];
   for (const code of codes) {
@@ -425,6 +464,62 @@ function addTaken(raw) {
   say(codes.length ? `Added ${added} course${added === 1 ? '' : 's'}.${unknown.length ? ` Not in the current catalog (kept anyway): ${unknown.join(', ')}.` : ''}` : 'Enter a course code like CSCI 135.');
   renderAll();
 }
+
+// ---------------- guided setup ----------------
+let wStep = 1;
+const wHas = n => [S.programs, S.interests, S.taken][n - 1].length > 0;
+function renderWizard() {
+  $('wProgChips').innerHTML = myProgs().map(p => chip(p.name, p.id, 'programs', typeNote(p))).join('');
+  $('wIntChips').innerHTML = S.interests.map(i => chip(i, i, 'interests')).join('');
+  $('wTakenChips').innerHTML = S.taken.map(c => chip(c, c, 'taken', findCourse(c)?.title)).join('');
+  const ideas = [...new Set([...IDEAS, ...S.interests.filter(i => IDEAS.includes(i))])];
+  $('wIdeas').innerHTML = ideas.map(i => `<button type="button" data-toggle="${esc(i)}" aria-pressed="${S.interests.includes(i)}">${esc(i)}</button>`).join('');
+  const last = wStep === 3;
+  $('wNext').textContent = wHas(wStep) ? (last ? 'Show my course ideas' : 'Next') : (last ? 'Skip and show my course ideas' : 'Skip this step');
+}
+function wGo(n, focus = true) {
+  wStep = n;
+  document.querySelectorAll('.wiz-step').forEach(s => { s.hidden = +s.dataset.step !== n; });
+  document.querySelectorAll('#wizSteps li').forEach(li => {
+    const k = +li.dataset.step;
+    if (k === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+    li.classList.toggle('done', k < n);
+    li.querySelector('.num').textContent = k < n ? '✓' : k;
+    let sr = li.querySelector('.sr-only'); if (!sr) { sr = document.createElement('span'); sr.className = 'sr-only'; li.append(sr); }
+    sr.textContent = k < n ? ' (done)' : k === n ? ' (current step)' : '';
+  });
+  $('wBack').hidden = n === 1; $('wMsg').textContent = '';
+  renderWizard();
+  if (focus) document.querySelector(`.wiz-step[data-step="${n}"] h3`).focus();
+}
+function wizShow(n = 1, focus = true) {
+  $('helpDialog').open && $('helpDialog').close();
+  $('wizard').hidden = false; $('layout').hidden = true;
+  window.scrollTo(0, 0); wGo(n, focus);
+}
+function wizFinish() {
+  S.onboarded = true;
+  $('wizard').hidden = true; $('layout').hidden = false;
+  renderAll();
+  selectTab($('tab-suggest')); window.scrollTo(0, 0); $('main').focus();
+  const n = S.interests.length + S.taken.length + S.programs.length;
+  say(n ? 'Your course ideas are ready. You can edit your answers on the left at any time.' : 'Explore freely. Add answers on the left whenever you like.');
+}
+$('wNext').onclick = () => wStep < 3 ? wGo(wStep + 1) : wizFinish();
+$('wBack').onclick = () => wGo(wStep - 1);
+$('wExit').onclick = wizFinish;
+$('wProgAdd').onclick = () => addProgram($('wProg'));
+$('wProg').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addProgram($('wProg')); } };
+$('wIntAdd').onclick = () => addInterest(undefined, $('wInt'));
+$('wInt').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(undefined, $('wInt')); } };
+$('wTakenAdd').onclick = () => { addTaken($('wTaken').value); $('wTaken').value = ''; };
+$('wTaken').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addTaken($('wTaken').value); $('wTaken').value = ''; } };
+$('wPasteBtn').onclick = () => { addTaken($('wPaste').value); $('wPaste').value = ''; };
+$('wizAgain').onclick = () => wizShow(1);
+// Help dialog
+$('helpBtn').onclick = () => $('helpDialog').showModal();
+$('helpClose').onclick = () => $('helpDialog').close();
+$('helpWizard').onclick = () => wizShow(1);
 
 // ---------------- tabs ----------------
 function selectTab(btn) {
@@ -450,7 +545,14 @@ $('takenInput').onkeydown = e => { if (e.key === 'Enter') { addTaken($('takenInp
 $('takenPasteBtn').onclick = () => { addTaken($('takenPaste').value); $('takenPaste').value = ''; };
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
-  if (t.dataset.remove) { const k = t.dataset.remove; S[k] = S[k].filter(x => x !== t.dataset.key); say('Removed.'); renderAll(); }
+  if (t.dataset.remove) {
+    const k = t.dataset.remove; S[k] = S[k].filter(x => x !== t.dataset.key); say('Removed.'); renderAll();
+    // The removed chip's button is gone; put focus somewhere sensible.
+    if (wizardOpen()) $(['wProg', 'wInt', 'wTaken'][wStep - 1]).focus();
+  }
+  else if (t.dataset.addprog) { const inp = $(t.dataset.for); addProgramId(t.dataset.addprog, inp); inp.focus(); }
+  else if (t.dataset.wizard) wizShow(+t.dataset.wizard);
+  else if (t.dataset.toggle) toggleInterest(t.dataset.toggle);
   else if (t.dataset.idea) addInterest(t.dataset.idea);
   else if (t.dataset.plan) {
     const code = t.dataset.plan, b = baseOf(code);
@@ -475,7 +577,7 @@ $('locForm').onsubmit = e => {
   save(); renderCareers();
   $('locStatus').textContent = locMsg(S.location);
 };
-$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); say('Profile cleared.'); } };
+$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); wizShow(1); say('Cleared. Let’s start again.'); } };
 $('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify({ ...S, exportedAt: new Date().toISOString(), catalog: D.catalogYear }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'um-pathfinder-plan.json'; a.click(); URL.revokeObjectURL(a.href);
@@ -525,5 +627,8 @@ async function load() {
   await status();
   renderAll();
 }
+// First visit (nothing entered yet): start with the guided setup.
+renderProfile();
+if (!S.onboarded && !S.programs.length && !S.interests.length && !S.taken.length) wizShow(1, false);
 load().catch(err => { $('catStatus').textContent = 'Could not load the catalog: ' + err.message; });
 })();

@@ -16,43 +16,143 @@
       <h1>UM Pathfinder</h1>
       <p class="tag">Find courses across UM that fit your degree, your interests and where you want to go.</p>
     </div>
-    <div class="catalog-status" aria-live="polite">
-      <span id="catStatus">Loading catalog…</span>
-      <button type="button" id="refreshBtn" class="btn-ghost">Check catalog for updates</button>
+    <div class="catalog-status">
+      <span id="catStatus" aria-live="polite">Loading catalog…</span>
+      <div class="top-actions">
+        <button type="button" id="helpBtn" class="btn-ghost">How it works</button>
+        <button type="button" id="refreshBtn" class="btn-ghost">Check catalog for updates</button>
+      </div>
     </div>
   </div>
 </header>
 
-<div class="wrap layout">
+<!-- First-visit guided setup: one question at a time. -->
+<section id="wizard" class="wrap wizard" aria-labelledby="wizTitle" hidden>
+  <div class="wiz-card">
+    <h2 id="wizTitle">Let’s find courses that fit you</h2>
+    <p class="wiz-intro">Three quick questions. Skip anything you’re unsure about. You can change your answers any time.</p>
+    <ol class="steps" id="wizSteps" aria-label="Setup progress">
+      <li data-step="1"><span class="num" aria-hidden="true">1</span> What you study</li>
+      <li data-step="2"><span class="num" aria-hidden="true">2</span> What you’re curious about</li>
+      <li data-step="3"><span class="num" aria-hidden="true">3</span> What you’ve taken</li>
+    </ol>
+
+    <div class="wiz-step" data-step="1">
+      <h3 tabindex="-1">Step 1 of 3: What are you studying?</h3>
+      <p class="wiz-help">Type a few letters of your major, like “psych” or “bio”, and pick it from the list that appears. Add a minor or certificate too if you have one. <strong>Undecided?</strong> That’s fine. Skip this step, and Pathfinder will suggest courses from your interests.</p>
+      <label for="wProg">Major, minor or certificate</label>
+      <div class="row">
+        <input id="wProg" list="progList" autocomplete="off" placeholder="Start typing, e.g. Psychology">
+        <button type="button" id="wProgAdd">Add</button>
+      </div>
+      <div class="pick" id="wProgPick"></div>
+      <ul class="chips" id="wProgChips" aria-label="Programs you added"></ul>
+    </div>
+
+    <div class="wiz-step" data-step="2" hidden>
+      <h3 tabindex="-1">Step 2 of 3: What are you curious about?</h3>
+      <p class="wiz-help">Pick a few topics, or type your own. Think about hobbies, problems you care about, or jobs you can picture yourself doing. Anything works: “podcasts”, “wildfire”, “helping kids”.</p>
+      <div class="idea-grid" id="wIdeas" role="group" aria-label="Topic ideas. Select any that interest you."></div>
+      <label for="wInt" class="mt">Your own topic</label>
+      <div class="row">
+        <input id="wInt" autocomplete="off" placeholder="e.g. mountain photography">
+        <button type="button" id="wIntAdd">Add</button>
+      </div>
+      <ul class="chips" id="wIntChips" aria-label="Your interests"></ul>
+    </div>
+
+    <div class="wiz-step" data-step="3" hidden>
+      <h3 tabindex="-1">Step 3 of 3: Which courses have you already taken?</h3>
+      <p class="wiz-help">This helps Pathfinder check prerequisites and suggest a good next step. Course codes like “WRIT 101” are on your unofficial transcript and your degree audit. <strong>First semester?</strong> Skip this step.</p>
+      <label for="wTaken">Course code or title</label>
+      <div class="row">
+        <input id="wTaken" list="courseList" autocomplete="off" placeholder="e.g. WRIT 101">
+        <button type="button" id="wTakenAdd">Add</button>
+      </div>
+      <details>
+        <summary>Have a list? Paste it all at once</summary>
+        <label for="wPaste">Paste course codes from your transcript or degree audit</label>
+        <textarea id="wPaste" rows="3" placeholder="WRIT 101, M 115, PSYX 100S …"></textarea>
+        <button type="button" id="wPasteBtn">Add all</button>
+      </details>
+      <ul class="chips" id="wTakenChips" aria-label="Courses you added"></ul>
+    </div>
+
+    <p class="msg" id="wMsg" role="status" aria-live="polite"></p>
+    <div class="wiz-nav">
+      <button type="button" id="wBack" class="btn-ghost">Back</button>
+      <button type="button" id="wNext">Next</button>
+      <button type="button" id="wExit" class="btn-link">Skip setup and explore on my own</button>
+    </div>
+  </div>
+</section>
+
+<dialog id="helpDialog" aria-labelledby="helpTitle">
+  <div class="dlg-head">
+    <h2 id="helpTitle">How Pathfinder works</h2>
+    <button type="button" class="btn-ghost" id="helpClose">Close<span class="sr-only"> help</span></button>
+  </div>
+  <ol class="how">
+    <li><strong>Tell it about you.</strong> Add your major, a few interests, and the courses you’ve taken, in the left-hand column or with the guided setup. Each one is optional.</li>
+    <li><strong>Browse suggestions.</strong> Pathfinder reads every course description in the official UM catalog and ranks the ones that match your interests and build on what you’ve taken.</li>
+    <li><strong>Save what you like.</strong> Click “Save to plan” on a course. Then check the other tabs to see your degree requirements, the minors and certificates you’re building toward, and the careers they lead to.</li>
+  </ol>
+  <h3>Common questions</h3>
+  <dl class="faq">
+    <dt>Is this my official degree audit?</dt>
+    <dd>No. Pathfinder is for exploring ideas. Your degree audit and your advisor have the final word on what counts toward your degree.</dd>
+    <dt>Where is my information saved?</dt>
+    <dd>Only in this web browser on this device. Nothing is sent to UM or anyone else. Use “Download my plan” to keep a copy or move it to another computer.</dd>
+    <dt>What does “possible substitution” mean?</dt>
+    <dd>A course from another department that looks a lot like one of your major’s electives. Some departments will count it toward your major if you ask. Show it to your advisor.</dd>
+    <dt>What does “prerequisite needs a check” mean?</dt>
+    <dd>The course asks for something Pathfinder can’t verify, like instructor consent or junior standing. Read the requirement, or ask the department.</dd>
+    <dt>Where do I find my course codes?</dt>
+    <dd>On your unofficial transcript or your degree audit. A code is a subject plus a number, like “WRIT 101” or “BIOB 160”.</dd>
+    <dt>Who can help me decide?</dt>
+    <dd>Your academic advisor, for degree plans and substitutions. UM’s Career Development office, for career questions and job searches.</dd>
+  </dl>
+  <p><button type="button" id="helpWizard">Start the guided setup</button></p>
+</dialog>
+
+<div class="wrap layout" id="layout">
   <aside class="profile" aria-labelledby="profileHeading">
-    <h2 id="profileHeading">Your profile</h2>
+    <h2 id="profileHeading">About you</h2>
     <p class="hint">Saved only in this browser. Nothing is sent anywhere.</p>
+    <button type="button" class="btn-ghost btn-small" id="wizAgain">Walk me through it step by step</button>
 
     <section class="field-group" aria-labelledby="progLbl">
-      <h3 id="progLbl">1. Majors, minors &amp; certificates</h3>
-      <label for="progInput">Add a program you're in or considering</label>
+      <h3 id="progLbl">1. What you study</h3>
+      <label for="progInput">Add a major, minor or certificate</label>
       <div class="row">
-        <input id="progInput" list="progList" autocomplete="off" placeholder="e.g. Psychology B.A.">
+        <input id="progInput" list="progList" autocomplete="off" placeholder="Start typing, e.g. Psychology">
         <button type="button" id="progAdd">Add</button>
       </div>
       <datalist id="progList"></datalist>
+      <div class="pick" id="progPick"></div>
+      <details class="help"><summary>Help<span class="sr-only"> with adding a program</span></summary>
+        <p>Type a few letters and choose your program from the list. You can add more than one, including programs you’re only considering. Undecided? Leave this empty.</p></details>
       <ul class="chips" id="progChips" aria-label="Selected programs"></ul>
     </section>
 
     <section class="field-group" aria-labelledby="intLbl">
-      <h3 id="intLbl">2. Interests</h3>
-      <label for="intInput">What are you curious about? (words or short phrases)</label>
+      <h3 id="intLbl">2. What you’re curious about</h3>
+      <label for="intInput">Add a topic (a word or short phrase)</label>
       <div class="row">
         <input id="intInput" autocomplete="off" placeholder="e.g. climate, storytelling, AI">
         <button type="button" id="intAdd">Add</button>
       </div>
+      <details class="help"><summary>Help<span class="sr-only"> with interests</span></summary>
+        <p>Pathfinder looks for these words in every course description at UM, in every college. Try hobbies, causes or jobs. Two or three topics give the best mix, and courses that match several of them rank higher.</p></details>
       <ul class="chips" id="intChips" aria-label="Your interests"></ul>
-      <p class="hint" id="intIdeasLbl">Ideas:</p>
+      <p class="hint" id="intIdeasLbl">Need ideas? Click to add:</p>
       <div class="ideas" id="intIdeas" aria-labelledby="intIdeasLbl"></div>
     </section>
 
     <section class="field-group" aria-labelledby="takenLbl">
-      <h3 id="takenLbl">3. Courses you've taken</h3>
+      <h3 id="takenLbl">3. Courses you’ve taken</h3>
+      <details class="help"><summary>Help<span class="sr-only"> with courses taken</span></summary>
+        <p>Find course codes like “WRIT 101” on your unofficial transcript or degree audit. Pathfinder uses them to check prerequisites, show your progress, and suggest a good next course. First semester? Skip this.</p></details>
       <label for="takenInput">Add a course by code or title</label>
       <div class="row">
         <input id="takenInput" list="courseList" autocomplete="off" placeholder="e.g. CSCI 135 or WRIT 101">
@@ -94,6 +194,17 @@
     <section role="tabpanel" id="panel-suggest" aria-labelledby="tab-suggest" tabindex="0">
       <h2>Suggested courses</h2>
       <p class="lead" id="suggestLead"></p>
+      <details class="legend">
+        <summary>What do the colored labels mean?</summary>
+        <dl class="legend-list">
+          <dt><span class="badge b-green">Green</span></dt><dd>Good news: counts toward your program, or you meet the prerequisites.</dd>
+          <dt><span class="badge b-blue">Blue</span></dt><dd>Counts toward a minor or certificate you could add.</dd>
+          <dt><span class="badge b-amber">Amber</span></dt><dd>Worth asking your advisor about, such as a possible substitution or a prerequisite Pathfinder can’t check.</dd>
+          <dt><span class="badge b-red">Red</span></dt><dd>You need a prerequisite first.</dd>
+          <dt><span class="badge b-plain">Tan</span></dt><dd>Background: Gen Ed category, or a department outside your major.</dd>
+        </dl>
+        <p class="hint">Every label also says what it means in words, so you never have to rely on the color alone.</p>
+      </details>
       <form class="filters" id="filters" onsubmit="return false">
         <div class="filter-search">
           <label for="q">Search the full catalog</label>
