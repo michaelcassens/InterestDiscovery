@@ -460,7 +460,7 @@ function addProgramId(id, inp) {
   const p = progById.get(id); if (!p) return;
   if (!S.programs.includes(p.id)) S.programs.push(p.id);
   if (inp) { inp.value = ''; pickBox(inp).innerHTML = ''; }
-  say(`Added ${p.name}.`); renderAll();
+  say(`Added ${p.name}`.replace(/([^.])$/, '$1.')); renderAll();
 }
 function addProgram(inp = $('progInput')) {
   const raw = inp.value.trim(), v = raw.toLowerCase(); if (!v || notReady()) return;
@@ -500,6 +500,70 @@ function addTaken(raw) {
   say(codes.length ? `Added ${added} course${added === 1 ? '' : 's'}.${unknown.length ? ` Not in the current catalog (kept anyway): ${unknown.join(', ')}.` : ''}` : 'Enter a course code like CSCI 135.');
   renderAll();
 }
+
+// ---------------- suggestion dropdown (ARIA 1.2 combobox) ----------------
+// Our own list instead of <datalist>, which doesn't show reliably (hidden
+// containers, iPhone Safari) and can't be styled or announced consistently.
+function attachCombo(input, { source, onPick, onEnter, label }) {
+  const wrap = document.createElement('div'); wrap.className = 'combo';
+  input.replaceWith(wrap); wrap.append(input);
+  const list = document.createElement('ul');
+  list.id = input.id + '-list'; list.className = 'combo-list'; list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-label', label); list.hidden = true; wrap.append(list);
+  Object.entries({ role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false', 'aria-controls': list.id }).forEach(([k, v]) => input.setAttribute(k, v));
+  let items = [], active = -1;
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const highlight = i => {
+    active = i;
+    [...list.children].forEach((li, k) => li.setAttribute('aria-selected', k === i));
+    if (i >= 0) { input.setAttribute('aria-activedescendant', list.children[i].id); list.children[i].scrollIntoView({ block: 'nearest' }); }
+    else input.removeAttribute('aria-activedescendant');
+  };
+  const open = () => {
+    items = D ? source(input.value.trim()) : [];
+    if (!items.length) return close();
+    list.innerHTML = items.map((it, k) => `<li role="option" id="${list.id}-${k}" aria-selected="false"><span class="opt-main">${esc(it.label)}</span>${it.sub ? ` <span class="opt-sub">${esc(it.sub)}</span>` : ''}</li>`).join('');
+    list.hidden = false; input.setAttribute('aria-expanded', 'true'); active = -1;
+  };
+  const pick = i => { const it = items[i]; close(); onPick(it); };
+  input.addEventListener('input', open);
+  input.addEventListener('focus', () => { if (input.value.trim()) open(); });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+  input.addEventListener('keydown', e => {
+    const isOpen = !list.hidden;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!isOpen) open(); else highlight(Math.min(active + 1, items.length - 1)); }
+    else if (e.key === 'ArrowUp' && isOpen) { e.preventDefault(); highlight(Math.max(active - 1, 0)); }
+    else if (e.key === 'Escape' && isOpen) { e.preventDefault(); close(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (isOpen && active >= 0) pick(active); else { close(); onEnter(); } }
+  });
+  list.addEventListener('mousedown', e => e.preventDefault());   // keep focus in the input
+  list.addEventListener('click', e => { const li = e.target.closest('[role=option]'); if (li) pick([...list.children].indexOf(li)); });
+}
+function programMatches(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return [];
+  return D.programs.filter(p => !S.programs.includes(p.id) && words.every(w => p.name.toLowerCase().includes(w)))
+    .sort((a, b) => (b.name.toLowerCase().startsWith(words[0]) - a.name.toLowerCase().startsWith(words[0])) ||
+      ((a.type === 'major' ? 0 : 1) - (b.type === 'major' ? 0 : 1)) || a.name.localeCompare(b.name))
+    .slice(0, 10).map(p => ({ id: p.id, label: p.name, sub: typeNote(p) }));
+}
+function courseMatches(q) {
+  const n = q.toUpperCase().replace(/\s+/g, ' ').trim(); if (n.length < 2) return [];
+  const compact = n.replace(/\s/g, ''), words = q.toLowerCase().split(/\s+/).filter(Boolean), done = takenBases(), out = [];
+  for (const c of byCode.values()) {
+    if (done.has(c.base) || c.level >= 500) continue;
+    const codeHit = c.code.replace(/\s/g, '').startsWith(compact);
+    const titleHit = words.every(w => c.title.toLowerCase().includes(w));
+    if (codeHit || titleHit) out.push({ c, rank: codeHit ? 0 : 1 });
+  }
+  return out.sort((a, b) => a.rank - b.rank || a.c.code.localeCompare(b.c.code, undefined, { numeric: true }))
+    .slice(0, 10).map(({ c }) => ({ id: c.code, label: c.code, sub: c.title }));
+}
+const comboFor = {
+  program: inp => attachCombo(inp, { label: 'Matching programs', source: programMatches,
+    onPick: it => { addProgramId(it.id, inp); inp.focus(); }, onEnter: () => addProgram(inp) }),
+  course: inp => attachCombo(inp, { label: 'Matching courses', source: courseMatches,
+    onPick: it => { addTaken(it.id); inp.value = ''; inp.focus(); }, onEnter: () => { addTaken(inp.value); inp.value = ''; } }),
+};
 
 // ---------------- guided setup ----------------
 let wStep = 1;
@@ -545,11 +609,11 @@ $('wNext').onclick = () => wStep < 3 ? wGo(wStep + 1) : wizFinish();
 $('wBack').onclick = () => wGo(wStep - 1);
 $('wExit').onclick = wizFinish;
 $('wProgAdd').onclick = () => addProgram($('wProg'));
-$('wProg').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addProgram($('wProg')); } };
+comboFor.program($('wProg'));
 $('wIntAdd').onclick = () => addInterest(undefined, $('wInt'));
 $('wInt').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(undefined, $('wInt')); } };
 $('wTakenAdd').onclick = () => { addTaken($('wTaken').value); $('wTaken').value = ''; };
-$('wTaken').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addTaken($('wTaken').value); $('wTaken').value = ''; } };
+comboFor.course($('wTaken'));
 $('wPasteBtn').onclick = () => { addTaken($('wPaste').value); $('wPaste').value = ''; };
 $('wizAgain').onclick = () => wizShow(1);
 // Help dialog
@@ -573,11 +637,11 @@ $('tabs').addEventListener('keydown', e => {
 // ---------------- events ----------------
 $('progAdd').onclick = addProgram;
 // Use statement bodies: an on* handler that returns false cancels the keystroke.
-$('progInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addProgram(); } };
+comboFor.program($('progInput'));
 $('intAdd').onclick = () => addInterest();
 $('intInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(); } };
 $('takenAdd').onclick = () => { addTaken($('takenInput').value); $('takenInput').value = ''; };
-$('takenInput').onkeydown = e => { if (e.key === 'Enter') { addTaken($('takenInput').value); $('takenInput').value = ''; } };
+comboFor.course($('takenInput'));
 $('takenPasteBtn').onclick = () => { addTaken($('takenPaste').value); $('takenPaste').value = ''; };
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
@@ -659,9 +723,6 @@ async function load() {
   byCode.clear(); byBase.clear(); progById.clear(); courseToProgs.clear(); IDF = new Map(); VEC = new Map();
   index();
   S.programs = S.programs.filter(id => progById.has(id));
-  const opts = [...D.programs].sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${esc(p.name)} (${typeLabel(p.type)})"></option>`);
-  $('progList').innerHTML = opts.join('');
-  $('courseList').innerHTML = [...byCode.values()].map(c => `<option value="${esc(c.code)}">${esc(c.title)}</option>`).join('');
   await status();
   renderAll();
 }

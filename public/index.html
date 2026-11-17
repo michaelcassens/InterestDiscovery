@@ -42,7 +42,7 @@
       <p class="wiz-help">Type a few letters of your major, like “psych” or “bio”, and pick it from the list that appears. Add a minor or certificate too if you have one. <strong>Undecided?</strong> That’s fine. Skip this step, and Pathfinder will suggest courses from your interests.</p>
       <label for="wProg">Major, minor or certificate</label>
       <div class="row">
-        <input id="wProg" list="progList" autocomplete="off" placeholder="Start typing, e.g. Psychology">
+        <input id="wProg" autocomplete="off" placeholder="Start typing, e.g. Psychology">
         <button type="button" id="wProgAdd">Add</button>
       </div>
       <div class="pick" id="wProgPick"></div>
@@ -66,7 +66,7 @@
       <p class="wiz-help">This helps Pathfinder check prerequisites and suggest a good next step. Course codes like “WRIT 101” are on your unofficial transcript and your degree audit. <strong>First semester?</strong> Skip this step.</p>
       <label for="wTaken">Course code or title</label>
       <div class="row">
-        <input id="wTaken" list="courseList" autocomplete="off" placeholder="e.g. WRIT 101">
+        <input id="wTaken" autocomplete="off" placeholder="e.g. WRIT 101">
         <button type="button" id="wTakenAdd">Add</button>
       </div>
       <details>
@@ -125,10 +125,9 @@
       <h3 id="progLbl">1. What you study</h3>
       <label for="progInput">Add a major, minor or certificate</label>
       <div class="row">
-        <input id="progInput" list="progList" autocomplete="off" placeholder="Start typing, e.g. Psychology">
+        <input id="progInput" autocomplete="off" placeholder="Start typing, e.g. Psychology">
         <button type="button" id="progAdd">Add</button>
       </div>
-      <datalist id="progList"></datalist>
       <div class="pick" id="progPick"></div>
       <details class="help"><summary>Help<span class="sr-only"> with adding a program</span></summary>
         <p>Type a few letters and choose your program from the list. You can add more than one, including programs you’re only considering. Undecided? Leave this empty.</p></details>
@@ -155,10 +154,9 @@
         <p>Find course codes like “WRIT 101” on your unofficial transcript or degree audit. Pathfinder uses them to check prerequisites, show your progress, and suggest a good next course. First semester? Skip this.</p></details>
       <label for="takenInput">Add a course by code or title</label>
       <div class="row">
-        <input id="takenInput" list="courseList" autocomplete="off" placeholder="e.g. CSCI 135 or WRIT 101">
+        <input id="takenInput" autocomplete="off" placeholder="e.g. CSCI 135 or WRIT 101">
         <button type="button" id="takenAdd">Add</button>
       </div>
-      <datalist id="courseList"></datalist>
       <details>
         <summary>Paste a list instead</summary>
         <label for="takenPaste">Paste course codes (from a transcript or degree audit)</label>

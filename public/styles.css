@@ -139,6 +139,18 @@ main:focus { outline: none; }
 .idea-grid button[aria-pressed=true] { background: var(--maroon); color: #fff; }
 .idea-grid button[aria-pressed=true]::before { content: "✓ "; }
 .mt { margin-top: 14px; }
+/* suggestion dropdown */
+.combo { position: relative; flex: 1 1 auto; min-width: 0; }
+.combo-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 2px); margin: 0; padding: 4px 0; list-style: none;
+  background: #fff; border: 1px solid #8a8270; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 300px; overflow-y: auto; }
+.combo-list [role=option] { padding: 7px 10px; cursor: pointer; line-height: 1.3; }
+.combo-list [role=option]:hover { background: var(--wheat); }
+.combo-list [role=option][aria-selected=true] { background: var(--maroon); color: #fff; }
+.combo-list [role=option][aria-selected=true] .opt-sub { color: #f3e6ea; }
+.opt-main { font-weight: 600; }
+.opt-sub { color: var(--muted); font-size: .85rem; }
+/* the profile column scrolls; let the dropdown overflow it visibly */
+.profile .combo-list { max-height: 240px; }
 .pick-q { font-weight: 600; margin: 10px 0 6px; font-size: .92rem; }
 .pick-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .pick-list button { white-space: normal; text-align: left; font-size: .88rem; padding: 5px 10px; }
