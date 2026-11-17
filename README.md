@@ -5,10 +5,10 @@ Helps University of Montana students explore courses from any college that fit t
 ## Run it
 
 ```bash
-node um_pathfinder/server.js
+node server.js
 ```
 
-Then open http://localhost:5600. You need Node 18 or newer. There are no packages to install.
+Run this from the project folder, then open http://localhost:5600. You need Node 18 or newer. There are no packages to install.
 
 The first time it runs, it downloads the catalog from catalog.umt.edu, which takes about 2 minutes. After that it re-checks the catalog whenever the copy is more than 7 days old (you can change this with `CATALOG_MAX_AGE_DAYS`). Students can also click **Check catalog for updates**.
 
