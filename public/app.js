@@ -390,8 +390,11 @@ function domainProfile() {
 }
 function jobLinks(role) {
   const loc = (S.location || '').trim(); const q = encodeURIComponent(role); const l = encodeURIComponent(loc);
+  // Signed-in LinkedIn redirects to its newer search page and drops the location setting, so the
+  // place also goes into the search text ("… in Seattle, WA"), which that page reads as a location filter.
+  const liQ = encodeURIComponent(!loc ? role : /^remote$/i.test(loc) ? `remote ${role}` : `${role} in ${loc}`);
   return `<div class="links"><span class="links-lbl">Jobs ${loc ? `near <strong>${esc(loc)}</strong>` : '<strong>anywhere</strong>'}:</span>
-    <a href="https://www.linkedin.com/jobs/search/?keywords=${q}${loc ? '&location=' + l : ''}" target="_blank" rel="noopener">LinkedIn jobs<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
+    <a href="https://www.linkedin.com/jobs/search/?keywords=${liQ}${loc ? '&location=' + l : ''}" target="_blank" rel="noopener">LinkedIn jobs<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
     <a href="https://www.indeed.com/jobs?q=${q}${loc ? '&l=' + l : ''}" target="_blank" rel="noopener">Indeed<span class="sr-only"> listings for ${esc(role)} (opens in new tab)</span></a>
     <a href="https://www.usajobs.gov/Search/Results?k=${q}${loc ? '&l=' + l : ''}" target="_blank" rel="noopener">USAJOBS<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
     <span class="links-sep" aria-hidden="true">|</span>
