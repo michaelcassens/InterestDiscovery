@@ -8,12 +8,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const STORE = 'umPathfinder.v1';
 
 // ---------------- state ----------------
-const blank = () => ({ programs: [], interests: [], taken: [], transfer: [], planned: [], location: 'Montana', filters: {} });
+const blank = () => ({ programs: [], interests: [], taken: [], transfer: [], planned: [], location: 'Montana', filters: {}, catalog: 'current' });
 let S = blank();
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(STORE) || '{}')); } catch { /* storage unavailable */ }
 function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch { /* ignore */ } }
 
-let D = null;               // catalog
+let D = null;               // catalog: courses always come from the current catalog
+// Programs (requirements) come from the student's catalog year ("catalog of record").
+let PROGRAMS = [], CURRENT_PROGRAMS = [], YEARS = [], REQ_YEAR = { id: 'current', label: '' };
+const yearCache = new Map();
 const byCode = new Map(), byBase = new Map(), progById = new Map();
 const courseToProgs = new Map();   // base code -> [{prog, group}]
 let IDF = new Map(), VEC = new Map();
@@ -66,7 +69,18 @@ function index() {
     VEC.set(c.code, { v, norm: Math.sqrt(norm) || 1 });
   }
   UMSUBJ = new Set(D.courses.map(c => c.subject));
-  for (const p of D.programs) {
+  indexPrograms(D.programs);
+}
+// A program's key is its short name (the last part of its catalog address), which stays the same
+// across catalog years even when UM reorganizes colleges. A name used twice also keeps its folder.
+function indexPrograms(list) {
+  progById.clear(); courseToProgs.clear();
+  const n = new Map();
+  for (const p of list) { p._path = p._path || p.id; const k = p._path.split('/').pop(); n.set(k, (n.get(k) || 0) + 1); }
+  PROGRAMS = list;
+  for (const p of list) {
+    const parts = p._path.split('/');
+    p.id = n.get(parts[parts.length - 1]) > 1 ? parts.slice(-2).join('/') : parts[parts.length - 1];
     progById.set(p.id, p);
     p._codes = new Set();
     p.groups.forEach((g, gi) => g.courses.forEach(x => [x.code, ...x.or].forEach(code => {
@@ -94,7 +108,9 @@ const vnorm = acc => Math.sqrt([...acc.values()].reduce((s, x) => s + x * x, 0))
 const takenCodes = () => [...S.taken, ...S.transfer.filter(t => t.equiv).map(t => t.equiv)];
 const takenBases = () => new Set(takenCodes().map(baseOf));
 const plannedBases = () => new Set(S.planned.map(baseOf));
-const myProgs = () => S.programs.map(id => progById.get(id)).filter(Boolean);
+// A saved program id may be an older full path ("college/dept/ba-x") or a short key ("ba-x").
+const resolveProg = id => progById.get(id) || progById.get(id.split('/').slice(-2).join('/')) || progById.get(id.split('/').pop());
+const myProgs = () => S.programs.map(resolveProg).filter(Boolean);
 function homeSubjects() {
   const counts = new Map();
   for (const p of myProgs().filter(p => p.type === 'major')) for (const b of p._codes) { const s = b.split(' ')[0]; counts.set(s, (counts.get(s) || 0) + 1); }
@@ -309,11 +325,29 @@ function statusFor(codes, done, plan) {
   if (bs.some(b => plan.has(b))) return '<span class="st st-plan">◐ Planned</span>';
   return '<span class="st st-no">○ Not yet</span>';
 }
+// Programs the student chose that don't exist in their catalog year.
+function missingPrograms() {
+  return S.programs.filter(id => !resolveProg(id)).map(id => {
+    const k = id.split('/').pop(), p = CURRENT_PROGRAMS.find(x => x.id === k || x.id.endsWith('/' + k));
+    return p ? p.name : k.replace(/-/g, ' ');
+  });
+}
+// "Requirements from the 2023–2024 catalog" note at the top of My degree.
+function yearNote() {
+  const miss = missingPrograms();
+  const which = REQ_YEAR.id === 'current' ? ' (the current catalog)' : ', your catalog year';
+  let html = `<p class="year-note">Requirements from the <strong>${esc(REQ_YEAR.label)}</strong>${which}. ` +
+    '<button type="button" class="btn-link" data-goyear="1">Change catalog year</button></p>';
+  if (miss.length) html += `<p class="year-note year-warn">${miss.map(esc).join(', ')} ${miss.length === 1 ? 'isn’t' : 'aren’t'} in the ${esc(REQ_YEAR.label)}. ` +
+    'It may have had a different name that year: add it again from the list, or choose a different catalog year.</p>';
+  return html;
+}
 function renderReqs() {
   const done = takenBases(), plan = plannedBases();
   const progs = myProgs();
+  if (!progs.length && S.programs.length) { $('reqs').innerHTML = yearNote(); return; }
   if (!progs.length) { $('reqs').innerHTML = emptyState('Add your major, minor or certificate, and its requirements from the official catalog will show up here, with the courses you’ve finished checked off.', [[1, 'Add what I study']]); return; }
-  $('reqs').innerHTML = progs.map(p => {
+  $('reqs').innerHTML = yearNote() + progs.map(p => {
     const all = [...p._codes]; const d = all.filter(b => done.has(b)).length;
     let section = '';
     const groups = p.groups.map(g => {
@@ -338,7 +372,7 @@ function minorRows() {
   const done = takenBases(), plan = plannedBases();
   const exp = expandInterests(S.interests);
   const rows = [];
-  for (const p of D.programs) {
+  for (const p of PROGRAMS) {
     if (p.type === 'major' || S.programs.includes(p.id)) continue;
     const codes = [...p._codes];
     const d = codes.filter(b => done.has(b)), pl = codes.filter(b => plan.has(b) && !done.has(b));
@@ -486,10 +520,10 @@ function addProgramId(id, inp) {
 }
 function addProgram(inp = $('progInput')) {
   const raw = inp.value.trim(), v = raw.toLowerCase(); if (!v || notReady()) return;
-  const exact = D.programs.find(p => `${p.name} (${typeLabel(p.type)})`.toLowerCase() === v) || D.programs.find(p => p.name.toLowerCase() === v);
+  const exact = PROGRAMS.find(p => `${p.name} (${typeLabel(p.type)})`.toLowerCase() === v) || PROGRAMS.find(p => p.name.toLowerCase() === v);
   if (exact) return addProgramId(exact.id, inp);
   const words = v.split(/\s+/);
-  const matches = D.programs.filter(p => words.every(w => p.name.toLowerCase().includes(w)) && !S.programs.includes(p.id))
+  const matches = PROGRAMS.filter(p => words.every(w => p.name.toLowerCase().includes(w)) && !S.programs.includes(p.id))
     .sort((a, b) => (a.type === 'major' ? 0 : 1) - (b.type === 'major' ? 0 : 1) || a.name.localeCompare(b.name));
   if (matches.length === 1) return addProgramId(matches[0].id, inp);
   if (!matches.length) { pickBox(inp).innerHTML = ''; return say(`No program matches “${raw}”. Try fewer letters, like “bio” or “art”.`); }
@@ -796,7 +830,7 @@ function attachCombo(input, { source, onPick, onEnter, label }) {
 }
 function programMatches(q) {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return [];
-  return D.programs.filter(p => !S.programs.includes(p.id) && words.every(w => p.name.toLowerCase().includes(w)))
+  return PROGRAMS.filter(p => !S.programs.includes(p.id) && words.every(w => p.name.toLowerCase().includes(w)))
     .sort((a, b) => (b.name.toLowerCase().startsWith(words[0]) - a.name.toLowerCase().startsWith(words[0])) ||
       ((a.type === 'major' ? 0 : 1) - (b.type === 'major' ? 0 : 1)) || a.name.localeCompare(b.name))
     .slice(0, 10).map(p => ({ id: p.id, label: p.name, sub: typeNote(p) }));
@@ -885,7 +919,8 @@ function planBlocks() {
   const course = code => findCourse(code);
   const credits = c => (c && c.credits) || '';
   B.push({ t: 'h1', text: 'My UM Pathfinder plan' });
-  B.push({ t: 'p', text: `Made ${today} from the ${D.catalogYear || 'University of Montana Academic Catalog'}.` });
+  B.push({ t: 'p', text: REQ_YEAR.id === 'current' ? `Made ${today} from the ${REQ_YEAR.label}.`
+    : `Made ${today}. Requirements follow my catalog year, the ${REQ_YEAR.label}. Course details come from the current ${yearLabel(D.catalogYear)}.` });
   B.push({ t: 'p', parts: [{ text: 'This is a plan for exploring, not an official record. ', bold: true },
     { text: 'Your degree audit and your academic advisor have the final word on requirements, substitutions and transfer credit.' }] });
 
@@ -1038,6 +1073,7 @@ document.addEventListener('click', e => {
     if (wizardOpen()) $(['wProg', 'wInt', 'wTaken'][wStep - 1]).focus();
   }
   else if (t.dataset.addprog) { const inp = $(t.dataset.for); addProgramId(t.dataset.addprog, inp); inp.focus(); }
+  else if (t.dataset.goyear) { $('catYear').scrollIntoView({ block: 'center' }); $('catYear').focus(); }
   else if (t.dataset.wizard) wizShow(+t.dataset.wizard);
   else if (t.dataset.toggle) toggleInterest(t.dataset.toggle);
   else if (t.dataset.idea) addInterest(t.dataset.idea);
@@ -1071,7 +1107,7 @@ $('locForm').onsubmit = e => {
   $('locStatus').textContent = n ? `Updated ${n} job search${n === 1 ? '' : 'es'} below to ${S.location || 'anywhere'}.` : locMsg(S.location);
   document.querySelectorAll('#careers .links').forEach(el => el.classList.add('just-updated'));
 };
-$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); wizShow(1); say('Cleared. Let’s start again.'); } };
+$('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); applyCatalogYear('current').then(() => { renderAll(); wizShow(1); say('Cleared. Let’s start again.'); }); } };
 $('docxBtn').onclick = e => downloadPlanDocx(e.currentTarget);
 $('printBtn').onclick = printPlan;
 // Backup file (JSON): only for loading the plan back into Pathfinder.
@@ -1080,10 +1116,47 @@ $('exportBtn').onclick = () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = planFileName('json'); say('Backup saved. Use “Load a backup file” to open it in Pathfinder on any computer.'); a.click(); URL.revokeObjectURL(a.href);
 };
 $('importFile').onchange = async e => {
-  try { const j = JSON.parse(await e.target.files[0].text()); S = Object.assign(blank(), j); syncLoc(); renderAll(); say('Plan loaded.'); }
+  try { const j = JSON.parse(await e.target.files[0].text()); S = Object.assign(blank(), j); syncLoc(); await applyCatalogYear(S.catalog || 'current'); renderAll(); say('Plan loaded.'); }
   catch { say('That file isn’t a Pathfinder plan.'); }
   e.target.value = '';
 };
+
+// ---------------- catalog year (catalog of record) ----------------
+// "2023 - 2024 University of Montana Academic Catalog" → "2023–2024 catalog"
+const yearLabel = t => { const m = String(t || '').match(/(\d{4})\s*[-–]\s*(\d{4})/); return m ? `${m[1]}–${m[2]} catalog` : 'current catalog'; };
+// Switch requirements to a catalog year. Courses stay from the current catalog.
+async function applyCatalogYear(id, quiet) {
+  let list = CURRENT_PROGRAMS, label = D.catalogYear;
+  if (id !== 'current') {
+    try {
+      if (!yearCache.has(id)) {
+        const r = await fetch(API + '/api/programs?year=' + encodeURIComponent(id));
+        if (!r.ok) throw new Error('not available');
+        yearCache.set(id, await r.json());
+      }
+      ({ programs: list, catalogYear: label } = yearCache.get(id));
+    } catch {
+      id = 'current';
+      if (!quiet) say('That catalog year couldn’t be loaded, so Pathfinder is using the current catalog.');
+    }
+  }
+  S.catalog = id; REQ_YEAR = { id, label: yearLabel(label) };
+  indexPrograms(list);
+  S.programs = [...new Set(S.programs.map(x => resolveProg(x)?.id || x))];   // keep ones missing this year
+  save(); syncYearSelects();
+}
+function syncYearSelects() {
+  const opts = YEARS.map(y => `<option value="${esc(y.id)}">${esc(yearLabel(y.label))}${y.id === 'current' ? ' (current)' : ''}</option>`).join('');
+  for (const id of ['catYear', 'wCatYear']) { const el = $(id); if (el.options.length !== YEARS.length) el.innerHTML = opts; el.value = S.catalog || 'current'; }
+}
+async function onYearChange(e) {
+  if (notReady()) return;
+  await applyCatalogYear(e.target.value);
+  renderAll();
+  say(`Requirements now follow the ${REQ_YEAR.label}.`);
+}
+$('catYear').onchange = onYearChange;
+$('wCatYear').onchange = onYearChange;
 
 // ---------------- catalog loading / refresh ----------------
 // API base: '' when the page is served by server.js itself; the Render URL when
@@ -1117,7 +1190,10 @@ async function load() {
   D = await (await fetch(API + '/api/catalog')).json();
   byCode.clear(); byBase.clear(); progById.clear(); courseToProgs.clear(); IDF = new Map(); VEC = new Map();
   index();
-  S.programs = S.programs.filter(id => progById.has(id));
+  CURRENT_PROGRAMS = D.programs;
+  try { YEARS = (await (await fetch(API + '/api/catalogs')).json()).years; } catch { YEARS = []; }
+  if (!YEARS.length) YEARS = [{ id: 'current', label: D.catalogYear }];
+  await applyCatalogYear(S.catalog || 'current', true);
   await status();
   renderAll();
 }

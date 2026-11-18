@@ -54,6 +54,20 @@ git subtree push --prefix=um_pathfinder origin main
 - **Fit:** a course gets a boost if it counts toward one of the student's programs, adds to a minor or certificate they've already started, or is a **possible substitution**. A possible substitution is a course from another department that closely resembles an elective group in their major. Students are always told to confirm these with an advisor.
 - **Prerequisites:** each prerequisite is checked against the courses the student entered. Requirements like "consent of instructor" or "junior standing" are marked "needs a check" because the app can't verify them.
 
+### Catalog years (catalog of record)
+
+Students follow the requirements of the catalog they're under, usually the year they started. They choose it in **What you study** (or in the guided setup):
+
+- **Program requirements** (My degree, minors, certificates) come from the chosen year.
+- **Courses** (descriptions, prerequisites, suggestions) always come from the current catalog, because those are the courses offered now.
+- Past catalogs from **2022–23 on** are crawled once, since archived catalogs don't change, and saved compressed in `data/archive/` (about 0.5 MB each). When UM archives a new year, add it to `KNOWN_ARCHIVES` in `catalog.js` and run:
+
+  ```bash
+  node catalog.js --archive 2026-2027
+  ```
+- Programs are matched across years by their short name in the catalog address (e.g. `bs-wildlife-biology-terrestrial`), because UM sometimes reorganizes colleges and the full address changes. If a student's program doesn't exist in their catalog year, Pathfinder says so instead of dropping it.
+- Catalogs before 2022–23 are in a different system (Coursedog) and as PDFs. They aren't supported, and students are told to ask their advisor.
+
 ### Transcripts and transfer courses
 
 - Students review every course before it's added. Courses with grades that usually earn no credit (F, W, NC and similar) start unchecked.

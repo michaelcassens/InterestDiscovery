@@ -40,7 +40,10 @@
     <div class="wiz-step" data-step="1">
       <h3 tabindex="-1">Step 1 of 3: What are you studying?</h3>
       <p class="wiz-help">Type a few letters of your major, like “psych” or “bio”, and pick it from the list that appears. Add a minor or certificate too if you have one. <strong>Undecided?</strong> That’s fine. Skip this step, and Pathfinder will suggest courses from your interests.</p>
-      <label for="wProg">Major, minor or certificate</label>
+      <label for="wCatYear">Your catalog year</label>
+      <select id="wCatYear" aria-describedby="wCatYearHint"><option value="current">Current catalog</option></select>
+      <p class="hint" id="wCatYearHint">Usually the year you started at UM; your degree audit shows it. Your requirements follow this catalog. New students: keep the current one.</p>
+      <label for="wProg" class="mt">Major, minor or certificate</label>
       <div class="row">
         <input id="wProg" autocomplete="off" placeholder="Start typing, e.g. Psychology">
         <button type="button" id="wProgAdd">Add</button>
@@ -125,6 +128,8 @@
     <dd>A course from another department that looks a lot like one of your major’s electives. Some departments will count it toward your major if you ask. Show it to your advisor.</dd>
     <dt>What does “prerequisite needs a check” mean?</dt>
     <dd>The course asks for something Pathfinder can’t verify, like instructor consent or junior standing. Read the requirement, or ask the department.</dd>
+    <dt>Which catalog year should I choose?</dt>
+    <dd>The catalog you’re held to, called your catalog of record. It’s usually the year you started at UM, and your degree audit shows it. Requirements follow that year; course ideas come from the current catalog. Pathfinder has catalogs from 2022–2023 on. For older ones, ask your advisor.</dd>
     <dt>Is it safe to upload my transcript?</dt>
     <dd>Yes. Pathfinder reads the file inside your browser. It is never sent to UM or anyone else, and it isn’t stored. Only the course codes you approve are saved, in this browser. A PDF works best. For a scan or photo, open your transcript in a browser and use Print → Save as PDF, or copy and paste its text.</dd>
     <dt>What about courses from other colleges, AP or dual credit?</dt>
@@ -145,7 +150,12 @@
 
     <section class="field-group" aria-labelledby="progLbl">
       <h3 id="progLbl">1. What you study</h3>
-      <label for="progInput">Add a major, minor or certificate</label>
+      <label for="catYear">Your catalog year</label>
+      <select id="catYear" aria-describedby="catYearHint"><option value="current">Current catalog</option></select>
+      <p class="hint" id="catYearHint">Usually the year you started at UM. Requirements follow this year.</p>
+      <details class="help"><summary>Help<span class="sr-only"> choosing a catalog year</span></summary>
+        <p>Your degree requirements come from the catalog you’re “under”, called your catalog of record. It’s usually the year you started at UM, and your degree audit shows it. Changing it only changes requirements. Course ideas always come from the current catalog, because those are the courses offered now. Catalogs from before 2022–2023 aren’t available here; ask your advisor.</p></details>
+      <label for="progInput" class="mt">Add a major, minor or certificate</label>
       <div class="row">
         <input id="progInput" autocomplete="off" placeholder="Start typing, e.g. Psychology">
         <button type="button" id="progAdd">Add</button>

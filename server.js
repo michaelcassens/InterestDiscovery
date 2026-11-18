@@ -31,6 +31,17 @@ async function refresh(force) {
   if (fresh) setData(fresh);
 }
 
+// Programs-only payload for an archived year, gzipped and kept in memory after first use.
+const programsCache = new Map();
+function archivedPrograms(id) {
+  if (programsCache.has(id)) return programsCache.get(id);
+  const full = catalog.archiveGz(id); if (!full) return null;
+  const d = JSON.parse(zlib.gunzipSync(full));
+  const out = zlib.gzipSync(JSON.stringify({ id, catalogYear: d.catalogYear, source: d.source, fetchedAt: d.fetchedAt, programs: d.programs }));
+  programsCache.set(id, out);
+  return out;
+}
+
 function cors(req, res) {
   const o = req.headers.origin;
   if (o && ALLOWED_ORIGINS.includes(o)) {
@@ -58,6 +69,19 @@ http.createServer((req, res) => {
     const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' };
     if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding, Origin' }); return res.end(gz); }
     res.writeHead(200, headers); return res.end(JSON.stringify(data));
+  }
+  // Catalog years a student can choose as their catalog of record (current first).
+  if (url.pathname === '/api/catalogs') {
+    return json(res, 200, { years: [{ id: 'current', label: data?.catalogYear || 'Current catalog' },
+      ...catalog.archives().map(id => ({ id, label: `${id.replace('-', '–')} Academic Catalog` }))] });
+  }
+  // Program requirements from an archived catalog year (courses always come from the current catalog).
+  if (url.pathname === '/api/programs') {
+    const gzBuf = archivedPrograms(url.searchParams.get('year') || '');
+    if (!gzBuf) return json(res, 404, { error: 'No catalog for that year' });
+    const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' };   // archives never change
+    if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding, Origin' }); return res.end(gzBuf); }
+    res.writeHead(200, headers); return res.end(zlib.gunzipSync(gzBuf));
   }
   if (url.pathname === '/api/refresh' && req.method === 'POST') {
     // Public endpoint: rate-limit so nobody can make us hammer catalog.umt.edu.
