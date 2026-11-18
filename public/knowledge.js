@@ -117,5 +117,30 @@ window.KNOWLEDGE = {
     { h: 'It makes your story distinct', p: 'Hundreds of graduates share your major. Far fewer share your major plus a certificate in GIS, a minor in Native American Studies, or a set of design courses. The combination is your differentiator.' },
     { h: 'It’s often free in credits', p: 'Gen Ed requirements and major electives already reserve space for courses outside your department. Choosing them intentionally can add up to a minor or certificate without extending time to degree.' },
     { h: 'It builds transfer and adaptability', p: 'Learning how a different field asks questions trains you to learn new fields later — the most durable skill in a changing job market.' }
-  ]
+  ],
+
+  // Subject codes other colleges commonly use, and the UM subjects that cover the same
+  // material. Used only to SUGGEST equivalents for transfer courses (e.g. ENGL 101 → WRIT 101);
+  // students confirm every match, and the Registrar makes official transfer decisions.
+  // Advisors: add or correct entries here.
+  transferSubjects: {
+    ENGL: ['WRIT', 'LIT', 'CRWR'], ENG: ['WRIT', 'LIT', 'CRWR'], ENC: ['WRIT'], COMP: ['WRIT'], WRT: ['WRIT'], WR: ['WRIT'],
+    MATH: ['M', 'STAT'], MAT: ['M', 'STAT'], MTH: ['M', 'STAT'], STA: ['STAT'],
+    PSY: ['PSYX'], PSYC: ['PSYX'], PSYCH: ['PSYX'], SOC: ['SOCI'], ANTH: ['ANTY'], ANT: ['ANTY'],
+    BIO: ['BIOB', 'BIOH', 'BIOE', 'BIOM', 'BIOO'], BIOL: ['BIOB', 'BIOH', 'BIOE', 'BIOM', 'BIOO'], BSC: ['BIOB', 'BIOH'],
+    CHEM: ['CHMY'], CHM: ['CHMY'], PHYS: ['PHSX'], PHY: ['PHSX'], ASTRO: ['ASTR'], AST: ['ASTR'],
+    GEOL: ['GEO', 'ERTH'], GLY: ['GEO'], GEOG: ['GPHY'], GEO: ['GEO', 'GPHY'], ENVS: ['ENST', 'ENSC'], ENV: ['ENST', 'ENSC'],
+    HIST: ['HSTA', 'HSTR'], HIS: ['HSTA', 'HSTR'], HST: ['HSTA', 'HSTR'], AMH: ['HSTA'], WOH: ['HSTR'],
+    POLS: ['PSCI'], POL: ['PSCI'], POLI: ['PSCI'], PSC: ['PSCI'], GOVT: ['PSCI'], GOV: ['PSCI'],
+    ECON: ['ECNS'], ECO: ['ECNS'], PHIL: ['PHL'], PHI: ['PHL'], REL: ['PHL', 'CLAS'], RELS: ['PHL', 'CLAS'],
+    COMM: ['COMX'], COM: ['COMX'], SPCH: ['COMX'], SPC: ['COMX'], JOUR: ['JRNL'], JOU: ['JRNL'],
+    CS: ['CSCI'], CSC: ['CSCI'], CIS: ['CSCI', 'BMIS', 'CAPP'], CPSC: ['CSCI'], COSC: ['CSCI'], IT: ['ITS', 'CAPP'],
+    ACCT: ['ACTG'], ACC: ['ACTG'], BUS: ['BGEN', 'BMGT'], BUSN: ['BGEN', 'BMGT'], MGMT: ['BMGT'], MKTG: ['BMKT'], FIN: ['BFIN'],
+    ART: ['ARTZ', 'ARTH'], ARTS: ['ARTZ', 'ARTH'], MUS: ['MUSI'], MUSC: ['MUSI'], MU: ['MUSI'], THEA: ['THTR'], THE: ['THTR'], DRAM: ['THTR'],
+    DAN: ['DANC'], DANCE: ['DANC'], FLM: ['FILM', 'MAR'],
+    SPAN: ['SPNS'], SPA: ['SPNS'], FREN: ['FRCH'], FRE: ['FRCH'], GER: ['GRMN'], GERM: ['GRMN'], JPN: ['JPNS'], JAPN: ['JPNS'], CHI: ['CHIN'], CHN: ['CHIN'],
+    CJ: ['CJUS'], CRJ: ['CJUS'], CRIM: ['CJUS', 'SOCI'], EDUC: ['EDU'], ED: ['EDU'], NURS: ['NRSG'], NUR: ['NRSG'],
+    HLTH: ['HTH', 'CHTH'], PE: ['HHP', 'KIN', 'ACT'], PHED: ['HHP', 'KIN'], KINE: ['KIN'], NUT: ['NUTR'], FN: ['NUTR'],
+    NAS: ['NASX'], AIS: ['NASX'], WGS: ['WGSS'], WMST: ['WGSS'], LING: ['LING'], FOR: ['FORS'],
+  }
 };

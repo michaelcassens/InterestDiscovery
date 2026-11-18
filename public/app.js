@@ -8,7 +8,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const STORE = 'umPathfinder.v1';
 
 // ---------------- state ----------------
-const blank = () => ({ programs: [], interests: [], taken: [], planned: [], location: 'Montana', filters: {} });
+const blank = () => ({ programs: [], interests: [], taken: [], transfer: [], planned: [], location: 'Montana', filters: {} });
 let S = blank();
 try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(STORE) || '{}')); } catch { /* storage unavailable */ }
 function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch { /* ignore */ } }
@@ -65,6 +65,7 @@ function index() {
     for (const [t, f] of v) { const w = (1 + Math.log(f)) * (IDF.get(t) || 0); v.set(t, w); norm += w * w; }
     VEC.set(c.code, { v, norm: Math.sqrt(norm) || 1 });
   }
+  UMSUBJ = new Set(D.courses.map(c => c.subject));
   for (const p of D.programs) {
     progById.set(p.id, p);
     p._codes = new Set();
@@ -89,7 +90,9 @@ function cosine(code, acc, accNorm) {
 const vnorm = acc => Math.sqrt([...acc.values()].reduce((s, x) => s + x * x, 0));
 
 // ---------------- profile helpers ----------------
-const takenBases = () => new Set(S.taken.map(baseOf));
+// Courses that count as taken: UM courses, plus transfer courses the student matched to a UM equivalent.
+const takenCodes = () => [...S.taken, ...S.transfer.filter(t => t.equiv).map(t => t.equiv)];
+const takenBases = () => new Set(takenCodes().map(baseOf));
 const plannedBases = () => new Set(S.planned.map(baseOf));
 const myProgs = () => S.programs.map(id => progById.get(id)).filter(Boolean);
 function homeSubjects() {
@@ -156,7 +159,7 @@ function recommend() {
   const exp = expandInterests(q ? [q] : S.interests);
   // history vector from what the student has taken (and planned)
   const hist = new Map();
-  S.taken.forEach(x => { const c = findCourse(x); c && addVec(hist, c.code, 1); });
+  takenCodes().forEach(x => { const c = findCourse(x); c && addVec(hist, c.code, 1); });
   S.planned.forEach(x => { const c = findCourse(x); c && addVec(hist, c.code, 0.5); });
   const hn = vnorm(hist);
   // elective groups in the student's majors, as vectors (for substitution ideas)
@@ -241,7 +244,7 @@ function updateFilterCount() {
 }
 function renderSuggestions() {
   const list = recommend();
-  const hasInput = S.interests.length || S.taken.length || $('q').value.trim();
+  const hasInput = S.interests.length || S.taken.length || S.transfer.length || $('q').value.trim();
   $('suggestLead').innerHTML = hasInput
     ? 'Courses from across UM that match your interests and build on what you’ve taken. The best fits are at the top.' +
       (S.planned.length ? '' : ' <strong>Tip:</strong> click “Save to plan” on any course you like, then open the other tabs to see what it counts toward.')
@@ -368,7 +371,7 @@ function renderMinors() {
 function domainProfile() {
   const scores = new Map(K.domains.map(d => [d.id, 0]));
   const sources = new Map(K.domains.map(d => [d.id, new Set()]));
-  const consider = [...S.taken.map(c => [c, 1]), ...S.planned.map(c => [c, 0.7])];
+  const consider = [...takenCodes().map(c => [c, 1]), ...S.planned.map(c => [c, 0.7])];
   for (const p of myProgs()) for (const b of p._codes) consider.push([b, p.type === 'major' ? 0.25 : 0.4]);
   for (const [code, w] of consider) {
     const c = findCourse(code); if (!c) continue;
@@ -444,6 +447,10 @@ function renderProfile() {
   $('takenChips').innerHTML = S.taken.map(c => chip(c, c, 'taken', findCourse(c)?.title)).join('');
   $('planChips').innerHTML = S.planned.map(c => chip(c, c, 'planned', findCourse(c)?.title)).join('');
   $('planEmpty').hidden = S.planned.length > 0;
+  $('xferList').innerHTML = S.transfer.map(t => `<li><div class="xfer-main"><strong>${esc(t.code || 'No course number')}</strong> ${esc(t.title)}` +
+    ` <span class="k">${esc(t.school)}</span></div><div class="xfer-eq ${t.equiv ? 'has' : ''}">${t.equiv ? `Counts as <strong>${esc(t.equiv)}</strong> ${esc(findCourse(t.equiv)?.title || '')}` : 'No direct UM equivalent'}</div>` +
+    `<button type="button" class="xfer-x" data-remove="transfer" data-key="${esc(t.id)}" aria-label="Remove ${esc(t.code || t.title)}">×</button></li>`).join('');
+  $('xferEmpty').hidden = S.transfer.length > 0; $('xferMatchBtn').hidden = !S.transfer.length;
   $('intIdeas').innerHTML = IDEAS.filter(i => !S.interests.includes(i)).slice(0, 10).map(i => `<button type="button" data-idea="${esc(i)}">+ ${esc(i)}</button>`).join('');
   renderWizard();
 }
@@ -492,18 +499,219 @@ function toggleInterest(v) {
   if (S.interests.includes(v)) { S.interests = S.interests.filter(x => x !== v); say(`Removed “${v}”.`); renderAll(); }
   else addInterest(v);
 }
+// Add one UM course to "taken" (no message, no re-render). Returns true if new.
+function pushTaken(code) {
+  const c = findCourse(code); const k = c ? c.code : normCode(code);
+  S.planned = S.planned.filter(t => baseOf(t) !== baseOf(k));
+  if (S.taken.some(t => baseOf(t) === baseOf(k))) return false;
+  S.taken.push(k); return true;
+}
 function addTaken(raw) {
   if (notReady()) return;
-  const codes = [...String(raw).toUpperCase().matchAll(/\b([A-Z]{1,5})\s?(\d{3}[A-Z]{0,2})\b/g)].map(m => `${m[1]} ${m[2]}`);
-  let added = 0, unknown = [];
+  const codes = [...String(raw).toUpperCase().matchAll(/\b([A-Z]{1,5})\s?(\d{3,4}[A-Z]{0,2})\b/g)].map(m => `${m[1]} ${m[2]}`);
+  let added = 0; const unknown = [], other = [];
   for (const code of codes) {
-    const c = findCourse(code); const k = c ? c.code : code;
-    if (!c) unknown.push(code);
-    if (!S.taken.some(t => baseOf(t) === baseOf(k))) { S.taken.push(k); added++; }
-    S.planned = S.planned.filter(t => baseOf(t) !== baseOf(k));
+    // A subject UM doesn't use (e.g. "ENG 101") is a course from another school.
+    if (!UMSUBJ.has(code.split(' ')[0])) {
+      if (!S.transfer.some(t => t.code === code)) { S.transfer.push({ id: `${code}|Another school`, code, title: '', credits: null, grade: null, school: 'Another school', term: '', equiv: '' }); other.push(code); }
+      continue;
+    }
+    if (!findCourse(code)) unknown.push(code);
+    if (pushTaken(code)) added++;
   }
-  say(codes.length ? `Added ${added} course${added === 1 ? '' : 's'}.${unknown.length ? ` Not in the current catalog (kept anyway): ${unknown.join(', ')}.` : ''}` : 'Enter a course code like CSCI 135.');
+  say(!codes.length ? 'Enter a course code like CSCI 135.' :
+    (added || !other.length ? `Added ${added} course${added === 1 ? '' : 's'}.` : '') +
+    (unknown.length ? ` Not in the current catalog (kept anyway): ${unknown.join(', ')}.` : '') +
+    (other.length ? `${added ? ' ' : ''}${other.join(', ')} ${other.length === 1 ? 'isn’t a UM course, so it went' : 'aren’t UM courses, so they went'} to “Transfer & other courses”, where you can choose a UM equivalent.` : ''));
   renderAll();
+}
+
+// ---------------- transcripts & transfer courses ----------------
+let UMSUBJ = new Set();
+const txCtx = { isUMSubject: s => UMSUBJ.has(s), findCourse };
+// Generic words that say little about what a course covers.
+const TITLE_STOP = new Set(['intro', 'principle', 'fundamental', 'foundation', 'survey', 'advanced', 'general', 'seminar', 'special', 'elementary', 'intermediate', 'applied', 'concept', 'issue', 'lab', 'laboratory', 'ii', 'iii', 'iv', 'ap', 'clep', 'ib', 'dual', 'exam', 'credit']);
+function titleVector(title) {
+  const v = new Map(); for (const t of tokens(title || '')) if (!TITLE_STOP.has(t)) v.set(t, (v.get(t) || 0) + (IDF.get(t) || 0));
+  return { v, norm: Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 0 };
+}
+// Likely UM equivalents for a course from another school:
+//  1. the same subject and number at UM (Montana's public colleges share course numbers);
+//  2. the same number in a related UM subject (ENGL 101 → WRIT 101; see knowledge.js);
+//  3. UM courses with similar titles at a similar level, favoring related subjects.
+const levelOf = num => { const n = parseInt(num, 10); return n >= 1000 ? Math.floor(n / 1000) * 100 : Math.floor(n / 100) * 100; };
+function titleSim(tv, title) {
+  if (!tv.norm) return 0;
+  const sv = titleVector(title); let dot = 0;
+  for (const [t, x] of tv.v) { const y = sv.v.get(t); if (y) dot += x * y; }
+  return sv.norm ? dot / (tv.norm * sv.norm) : 0;
+}
+function suggestEquiv(item) {
+  const [subj, num] = (item.code || '').split(' ');
+  const same = subj && UMSUBJ.has(subj) ? findCourse(item.code) : null;
+  const related = (K.transferSubjects || {})[subj] || [];
+  const relatedSame = num ? related.map(r => findCourse(`${r} ${num}`)).filter(c => c && (!same || c.base !== same.base)) : [];
+  // No course number (AP, CLEP, dual credit): assume an introductory, 100-level course.
+  const tv = titleVector(item.title), lvl = num ? levelOf(num) : 100, similar = [];
+  if (tv.norm) {
+    const skip = new Set([same, ...relatedSame].filter(Boolean).map(c => c.base));
+    for (const c of byCode.values()) {
+      if (c.level >= 500 || skip.has(c.base)) continue;
+      const e = VEC.get(c.code); let dot = 0;
+      for (const [t, x] of tv.v) { const y = e.v.get(t); if (y) dot += x * y; }
+      let sim = dot / (tv.norm * e.norm);
+      if (!sim) continue;
+      if (lvl !== null) { const d = Math.abs(Math.floor(c.level / 100) * 100 - lvl); sim *= d === 0 ? 1 : d === 100 ? 0.6 : 0.25; }
+      if (related.includes(c.subject)) sim *= 1.6;
+      if (sim > 0.2) similar.push({ c, sim });
+    }
+    similar.sort((x, y) => y.sim - x.sim);
+  }
+  // Pre-select only when confident: same number (and the titles agree, or there's no title).
+  let pre = '';
+  if (same && (!tv.norm || titleSim(tv, same.title) > 0.15)) pre = same.code;
+  else if (!same && relatedSame.length === 1 && titleSim(tv, relatedSame[0].title) > 0.15) pre = relatedSame[0].code;
+  return { same, relatedSame, similar: similar.slice(0, 3).map(x => x.c), pre };
+}
+
+let TX = null;   // review dialog state: { mode: 'add' | 'edit', rows, opener }
+function openReview(items, mode = 'add') {
+  const have = takenBases();
+  TX = { mode, opener: document.activeElement, rows: items.map((it, i) => {
+    const r = { ...it, i, group: it.group || 'transfer' };
+    if (r.group === 'transfer') {
+      r.sugg = suggestEquiv(r);
+      r.equiv = it.equiv !== undefined ? it.equiv : r.sugg.pre;
+      r.extra = r.equiv && ![r.sugg.same?.code, ...r.sugg.relatedSame.map(c => c.code), ...r.sugg.similar.map(c => c.code)].includes(r.equiv) ? findCourse(r.equiv) : null;
+      r.already = mode === 'add' && S.transfer.some(t => t.id === `${r.code || r.title}|${r.school}`);
+    } else r.already = have.has(baseOf(r.code));
+    r.include = mode === 'edit' || (!r.noCredit && !r.already);
+    return r;
+  }) };
+  renderReview();
+  $('txDialog').showModal();
+}
+function eqLabel(r) {
+  if (!r.equiv) return 'No direct UM equivalent';
+  const c = findCourse(r.equiv); return `${r.equiv}${c ? ' ' + c.title : ''}`;
+}
+function renderReview() {
+  const R = TX.rows, by = g => R.filter(r => r.group === g);
+  const um = by('um'), pr = by('progress'), tr = by('transfer');
+  const edit = TX.mode === 'edit';
+  $('txTitle').textContent = edit ? 'Match your transfer courses' : 'Review the courses we found';
+  $('txSummary').innerHTML = edit
+    ? 'For each course, choose the UM course it equals, or leave it as “no direct equivalent”.'
+    : `Found <strong>${R.length}</strong> course${R.length === 1 ? '' : 's'}: ${um.length} from UM, ${pr.length} in progress, ${tr.length} from other schools. ` +
+      'Nothing is added until you click the button at the bottom.';
+  const meta = r => [r.group === 'transfer' && r.school ? esc(r.school) : '', r.grade ? `Grade ${esc(r.grade)}` : '', r.credits != null ? `${r.credits} credits` : '', r.term ? esc(r.term) : ''].filter(Boolean).join(' · ');
+  const check = r => edit ? '' : `<input type="checkbox" data-txi="${r.i}" ${r.include ? 'checked' : ''}> `;
+  const notes = r => [
+    r.already ? '<span class="tx-note">Already in your profile</span>' : '',
+    r.noCredit ? `<span class="tx-note tx-warn">Grade ${esc(r.grade)} usually earns no credit, so it starts unchecked</span>` : '',
+    r.group !== 'transfer' && !r.known ? '<span class="tx-note tx-warn">Not in the current UM catalog (it may have been renumbered)</span>' : '',
+  ].join('');
+  const simpleRow = r => `<li class="tx-row"><label>${check(r)}<strong>${esc(r.code)}</strong> ${esc(r.title)}</label>
+    <div class="tx-meta">${meta(r)}</div>${notes(r)}</li>`;
+  const xferRow = r => {
+    const seen = new Set();
+    const tag = c => r.sugg.same && c.code === r.sugg.same.code ? ' <span class="k">· same number</span>' : r.sugg.relatedSame.some(x => x.code === c.code) ? ' <span class="k">· same number, related subject</span>' : '';
+    const btns = [r.sugg.same, ...r.sugg.relatedSame, ...r.sugg.similar, r.extra].filter(c => c && !seen.has(c.code) && seen.add(c.code)).map(c =>
+      `<button type="button" class="eq-opt" data-eqi="${r.i}" data-code="${esc(c.code)}" aria-pressed="${r.equiv === c.code}">${esc(c.code)} <span class="k">${esc(c.title)}</span>${tag(c)}</button>`).join('');
+    return `<li class="tx-row tx-xfer"><label>${check(r)}<strong>${esc(r.code || 'No course number')}</strong> ${esc(r.title)}</label>
+      <div class="tx-meta">${meta(r)}</div>${notes(r)}
+      <div class="eq" role="group" aria-label="UM equivalent for ${esc(r.code || r.title)}">
+        <p class="eq-now">Counts at UM as: <strong id="eqnow-${r.i}">${esc(eqLabel(r))}</strong></p>
+        <div class="eq-choices">${btns}<button type="button" class="eq-opt" data-eqi="${r.i}" data-code="" aria-pressed="${!r.equiv}">No direct equivalent</button></div>
+        <label class="sr-only" for="eq-${r.i}">Search all UM courses for an equivalent to ${esc(r.code || r.title)}</label>
+        <input id="eq-${r.i}" class="eq-search" autocomplete="off" placeholder="Or search all UM courses…">
+      </div></li>`;
+  };
+  const section = (title, hint, rows, fn) => rows.length ? `<section class="tx-group"><h3>${title} <span class="k">(${rows.length})</span></h3>${hint ? `<p class="hint">${hint}</p>` : ''}<ul class="tx-list">${rows.map(fn).join('')}</ul></section>` : '';
+  $('txBody').innerHTML =
+    section('UM courses', 'Uncheck any you don’t want added.', um, simpleRow) +
+    section('In progress', 'Courses you’re taking now. Pathfinder counts them as taken so it can suggest what comes next.', pr, simpleRow) +
+    section(edit ? 'Transfer &amp; other courses' : 'From other schools',
+      'Pick the UM course each one equals. “Same number” means UM uses the same course number; Montana’s public colleges share course numbers. If nothing fits, choose “No direct equivalent”. The Registrar makes the official decision.', tr, xferRow);
+  // A search box for any UM course, on each transfer row.
+  tr.forEach(r => attachCombo($(`eq-${r.i}`), { label: 'Matching UM courses', source: courseMatchesAll,
+    onPick: it => { r.equiv = it.id; $(`eq-${r.i}`).value = ''; updateEq(r); }, onEnter: () => {} }));
+  $('txMsg').textContent = '';
+  updateSaveLabel();
+}
+// Update one row's equivalent without re-rendering, so keyboard focus stays put.
+function updateEq(r) {
+  const box = document.querySelector(`.eq-opt[data-eqi="${r.i}"][data-code=""]`).parentElement;
+  if (r.equiv && !box.querySelector(`[data-code="${CSS.escape(r.equiv)}"]`)) {   // a searched course: add it as a choice
+    const c = findCourse(r.equiv), b = document.createElement('button');
+    b.type = 'button'; b.className = 'eq-opt'; b.dataset.eqi = r.i; b.dataset.code = r.equiv;
+    b.innerHTML = `${esc(r.equiv)} <span class="k">${esc(c ? c.title : '')}</span>`; box.prepend(b);
+  }
+  box.querySelectorAll('.eq-opt').forEach(b => b.setAttribute('aria-pressed', b.dataset.code === r.equiv));
+  $(`eqnow-${r.i}`).textContent = eqLabel(r);
+  $('txMsg').textContent = `${r.code || r.title}: ${r.equiv ? 'counts as ' + eqLabel(r) : 'no direct UM equivalent'}.`;
+}
+function updateSaveLabel() {
+  const n = TX.rows.filter(r => r.include).length;
+  $('txSave').textContent = TX.mode === 'edit' ? 'Save' : n ? `Add ${n} course${n === 1 ? '' : 's'}` : 'Add courses';
+  $('txSave').disabled = TX.mode !== 'edit' && !n;
+}
+function courseMatchesAll(q) {
+  const n = q.toUpperCase().replace(/\s/g, ''), words = q.toLowerCase().split(/\s+/).filter(Boolean); if (n.length < 2) return [];
+  const out = [];
+  for (const c of byCode.values()) {
+    if (c.level >= 500) continue;
+    const codeHit = c.code.replace(/\s/g, '').startsWith(n), titleHit = words.every(w => c.title.toLowerCase().includes(w));
+    if (codeHit || titleHit) out.push({ c, rank: codeHit ? 0 : 1 });
+  }
+  return out.sort((a, b) => a.rank - b.rank || a.c.code.localeCompare(b.c.code, undefined, { numeric: true }))
+    .slice(0, 10).map(({ c }) => ({ id: c.code, label: c.code, sub: c.title }));
+}
+function closeReview() {
+  const opener = TX && TX.opener; if ($('txDialog').open) $('txDialog').close(); TX = null;
+  if (opener && opener.isConnected) opener.focus();
+}
+function saveReview() {
+  let um = 0, xf = 0; const edit = TX.mode === 'edit';
+  for (const r of TX.rows) {
+    if (edit) { const t = S.transfer.find(x => x.id === r.id); if (t) t.equiv = r.equiv; continue; }
+    if (!r.include) continue;
+    if (r.group === 'transfer') {
+      const id = `${r.code || r.title}|${r.school}`, t = S.transfer.find(x => x.id === id);
+      if (t) t.equiv = r.equiv;
+      else { S.transfer.push({ id, code: r.code, title: r.title, credits: r.credits, grade: r.grade, school: r.school, term: r.term, equiv: r.equiv }); xf++; }
+    } else if (pushTaken(r.code)) um++;
+  }
+  closeReview(); renderAll();
+  say(edit ? 'Saved your UM equivalents.' : `Added ${um} UM course${um === 1 ? '' : 's'}${xf ? ` and ${xf} from other schools (under “Transfer & other courses”)` : ''}.`);
+}
+// Text from a paste box: plain lists of UM courses are added straight away;
+// anything with other-school courses, in-progress courses or no-credit grades opens the review.
+function importText(text) {
+  if (notReady()) return;
+  const items = Transcript.parse(String(text).split(/\r?\n/), txCtx);
+  if (!items.length) return say('No course codes found. Codes look like “WRIT 101”: a subject and a number.');
+  if (items.every(i => i.group === 'um' && !i.noCredit)) { const n = items.filter(i => pushTaken(i.code)).length; say(`Added ${n} course${n === 1 ? '' : 's'}.`); renderAll(); return; }
+  openReview(items);
+}
+async function importFile(input) {
+  const file = input.files[0]; input.value = '';
+  if (!file || notReady()) return;
+  say(`Reading ${file.name}…`);
+  try {
+    const items = Transcript.parse(await Transcript.readFile(file), txCtx);
+    if (!items.length) return say('No course codes found in that file. If it’s a scan or photo, open your transcript in a browser and use Print → Save as PDF, or copy its text and paste it.');
+    say(`Found ${items.length} courses. Review them in the window that opened.`);
+    openReview(items);
+  } catch (e) { say(e.message || 'Could not read that file.'); }
+}
+function addOtherCourse() {
+  const text = $('xferCode').value.trim(); if (!text || notReady()) return;
+  const m = text.match(/^([A-Za-z]{1,5})\s?(\d{3,4}[A-Za-z]{0,2})\b\s*[-–:]?\s*(.*)$/);
+  const item = { group: 'transfer', code: m ? `${m[1].toUpperCase()} ${m[2].toUpperCase()}` : '', title: m ? m[3] : text,
+    school: $('xferSchool').value.trim() || 'Another school', credits: null, grade: null, term: '', known: false };
+  $('xferCode').value = ''; $('xferSchool').value = '';
+  openReview([item]);
 }
 
 // ---------------- suggestion dropdown (ARIA 1.2 combobox) ----------------
@@ -572,11 +780,12 @@ const comboFor = {
 
 // ---------------- guided setup ----------------
 let wStep = 1;
-const wHas = n => [S.programs, S.interests, S.taken][n - 1].length > 0;
+const wHas = n => n === 3 ? S.taken.length + S.transfer.length > 0 : [S.programs, S.interests][n - 1].length > 0;
 function renderWizard() {
   $('wProgChips').innerHTML = myProgs().map(p => chip(p.name, p.id, 'programs', typeNote(p))).join('');
   $('wIntChips').innerHTML = S.interests.map(i => chip(i, i, 'interests')).join('');
-  $('wTakenChips').innerHTML = S.taken.map(c => chip(c, c, 'taken', findCourse(c)?.title)).join('');
+  $('wTakenChips').innerHTML = S.taken.map(c => chip(c, c, 'taken', findCourse(c)?.title)).join('') +
+    S.transfer.map(t => chip(t.code || t.title, t.id, 'transfer', t.equiv ? `other school · counts as ${t.equiv}` : 'other school · no UM equivalent')).join('');
   const ideas = [...new Set([...IDEAS, ...S.interests.filter(i => IDEAS.includes(i))])];
   $('wIdeas').innerHTML = ideas.map(i => `<button type="button" data-toggle="${esc(i)}" aria-pressed="${S.interests.includes(i)}">${esc(i)}</button>`).join('');
   const last = wStep === 3;
@@ -607,7 +816,7 @@ function wizFinish() {
   $('wizard').hidden = true; $('layout').hidden = false;
   renderAll();
   selectTab($('tab-suggest')); window.scrollTo(0, 0); $('main').focus();
-  const n = S.interests.length + S.taken.length + S.programs.length;
+  const n = S.interests.length + S.taken.length + S.transfer.length + S.programs.length;
   say(n ? 'Your course ideas are ready. You can edit your answers on the left at any time.' : 'Explore freely. Add answers on the left whenever you like.');
 }
 $('wNext').onclick = () => wStep < 3 ? wGo(wStep + 1) : wizFinish();
@@ -619,7 +828,7 @@ $('wIntAdd').onclick = () => addInterest(undefined, $('wInt'));
 $('wInt').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(undefined, $('wInt')); } };
 $('wTakenAdd').onclick = () => { addTaken($('wTaken').value); $('wTaken').value = ''; };
 comboFor.course($('wTaken'));
-$('wPasteBtn').onclick = () => { addTaken($('wPaste').value); $('wPaste').value = ''; };
+$('wPasteBtn').onclick = () => { importText($('wPaste').value); $('wPaste').value = ''; };
 $('wizAgain').onclick = () => wizShow(1);
 // Help dialog
 $('helpBtn').onclick = () => $('helpDialog').showModal();
@@ -647,11 +856,22 @@ $('intAdd').onclick = () => addInterest();
 $('intInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addInterest(); } };
 $('takenAdd').onclick = () => { addTaken($('takenInput').value); $('takenInput').value = ''; };
 comboFor.course($('takenInput'));
-$('takenPasteBtn').onclick = () => { addTaken($('takenPaste').value); $('takenPaste').value = ''; };
+$('takenPasteBtn').onclick = () => { importText($('takenPaste').value); $('takenPaste').value = ''; };
+// Transcript upload, transfer courses and the review dialog
+$('txFile').onchange = e => importFile(e.target);
+$('wTxFile').onchange = e => importFile(e.target);
+$('xferAdd').onclick = addOtherCourse;
+$('xferCode').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addOtherCourse(); } };
+$('xferMatchBtn').onclick = () => openReview(S.transfer.map(t => ({ ...t, group: 'transfer' })), 'edit');
+$('txSave').onclick = saveReview;
+$('txClose').onclick = $('txCancel').onclick = closeReview;
+$('txDialog').addEventListener('close', () => { if (TX) closeReview(); });   // Escape key
+$('txBody').addEventListener('change', e => { const i = e.target.dataset.txi; if (i !== undefined) { TX.rows[+i].include = e.target.checked; updateSaveLabel(); } });
+$('txBody').addEventListener('click', e => { const b = e.target.closest('.eq-opt'); if (b) { const r = TX.rows[+b.dataset.eqi]; r.equiv = b.dataset.code; updateEq(r); } });
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.remove) {
-    const k = t.dataset.remove; S[k] = S[k].filter(x => x !== t.dataset.key); say('Removed.'); renderAll();
+    const k = t.dataset.remove; S[k] = S[k].filter(x => (x && x.id !== undefined ? x.id : x) !== t.dataset.key); say('Removed.'); renderAll();
     // The removed chip's button is gone; put focus somewhere sensible.
     if (wizardOpen()) $(['wProg', 'wInt', 'wTaken'][wStep - 1]).focus();
   }
@@ -738,6 +958,6 @@ async function load() {
 }
 // First visit (nothing entered yet): start with the guided setup.
 renderProfile();
-if (!S.onboarded && !S.programs.length && !S.interests.length && !S.taken.length) wizShow(1, false);
+if (!S.onboarded && !S.programs.length && !S.interests.length && !S.taken.length && !S.transfer.length) wizShow(1, false);
 load().catch(err => { $('catStatus').textContent = 'Could not load the catalog: ' + err.message; });
 })();

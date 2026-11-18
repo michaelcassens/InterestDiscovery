@@ -43,6 +43,7 @@ git subtree push --prefix=um_pathfinder origin main
 | `catalog.js` | Crawls every subject on `/courses/` and every undergraduate program page under `/colleges-schools-programs/`. It reads each course's title, credits, description, prerequisites, Gen Ed attributes and terms offered, plus each program's requirement groups and total credits. It saves them to `data/catalog.json`. |
 | `server.js` | Serves the app and the cached catalog, and refreshes the cache in the background. |
 | `public/app.js` | Does all matching in the browser, so no student data leaves the device. |
+| `public/transcript.js` | Reads an unofficial transcript (PDF, saved web page, text, or pasted text) in the browser and finds each course's subject and number, title, grade and credits. It sorts courses into UM, in progress, and other schools (transfer, AP, dual credit). PDFs are read with pdf.js, which loads from cdnjs only when a student picks a PDF. The transcript itself is never uploaded or stored. |
 | `public/knowledge.js` | Holds the hand-written layer: skill areas, learning outcomes, careers, hybrid "combination" roles, interest synonyms and the case for interdisciplinary study. **Faculty and advisors should edit this file.** |
 
 ### Suggestion score
@@ -52,8 +53,19 @@ git subtree push --prefix=um_pathfinder origin main
 - **Fit:** a course gets a boost if it counts toward one of the student's programs, adds to a minor or certificate they've already started, or is a **possible substitution**. A possible substitution is a course from another department that closely resembles an elective group in their major. Students are always told to confirm these with an advisor.
 - **Prerequisites:** each prerequisite is checked against the courses the student entered. Requirements like "consent of instructor" or "junior standing" are marked "needs a check" because the app can't verify them.
 
+### Transcripts and transfer courses
+
+- Students review every course before it's added. Courses with grades that usually earn no credit (F, W, NC and similar) start unchecked.
+- Courses from other schools go under **Transfer & other courses**. Students match each one to a UM equivalent or leave it as "no direct equivalent". Pathfinder suggests matches in this order:
+  1. the same course number at UM, since Montana's public colleges share common course numbers;
+  2. the same number in a related UM subject (for example ENGL 101 → WRIT 101), using the `transferSubjects` table in `knowledge.js`;
+  3. UM courses with similar titles at a similar level.
+- A transfer course with a UM equivalent counts like that UM course for prerequisites, requirements, minors and careers.
+- The Registrar decides official transfer credit, and the app says so wherever students choose equivalents.
+
 ## Known limits
 
 - Requirement rules such as "choose 2 of" are shown but not fully enforced, so progress numbers are approximate. The degree audit is still the official record.
 - The catalog doesn't publish program learning outcomes, so the outcomes shown come from `knowledge.js`.
+- Transcript reading was tested with sample transcripts in a typical Banner layout, not yet with real UM transcripts. Scanned images can't be read, because there's no OCR. Credit with no course number (like AP exams) has to be added by hand.
 - Job links open live searches on LinkedIn, Indeed, USAJOBS and O*NET. The app does not scrape LinkedIn, because that breaks LinkedIn's terms and requires a login.

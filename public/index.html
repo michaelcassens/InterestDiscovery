@@ -63,15 +63,19 @@
 
     <div class="wiz-step" data-step="3" hidden>
       <h3 tabindex="-1">Step 3 of 3: Which courses have you already taken?</h3>
-      <p class="wiz-help">This helps Pathfinder check prerequisites and suggest a good next step. Course codes like “WRIT 101” are on your unofficial transcript and your degree audit. <strong>First semester?</strong> Skip this step.</p>
-      <label for="wTaken">Course code or title</label>
+      <p class="wiz-help">This helps Pathfinder check prerequisites and suggest a good next step. The quickest way: upload your unofficial transcript, and Pathfinder will find your courses, including ones from other colleges, AP or dual credit. <strong>First semester?</strong> Skip this step.</p>
+      <div class="upload">
+        <label class="btn-ghost file-btn upload-btn">Upload your unofficial transcript<input type="file" id="wTxFile" accept=".pdf,.txt,.htm,.html,application/pdf,text/plain,text/html" aria-describedby="wTxFileHint"></label>
+        <p class="hint" id="wTxFileHint">PDF works best. It’s read inside this browser and never uploaded. You’ll review every course before anything is added.</p>
+      </div>
+      <label for="wTaken">Or add a course by code or title</label>
       <div class="row">
         <input id="wTaken" autocomplete="off" placeholder="e.g. WRIT 101">
         <button type="button" id="wTakenAdd">Add</button>
       </div>
       <details>
         <summary>Have a list? Paste it all at once</summary>
-        <label for="wPaste">Paste course codes from your transcript or degree audit</label>
+        <label for="wPaste">Paste course codes, or the text of your transcript</label>
         <textarea id="wPaste" rows="3" placeholder="WRIT 101, M 115, PSYX 100S …"></textarea>
         <button type="button" id="wPasteBtn">Add all</button>
       </details>
@@ -86,6 +90,20 @@
     </div>
   </div>
 </section>
+
+<dialog id="txDialog" class="tx-dialog" aria-labelledby="txTitle">
+  <div class="dlg-head">
+    <h2 id="txTitle">Review your courses</h2>
+    <button type="button" class="btn-ghost" id="txClose">Cancel<span class="sr-only"> and close</span></button>
+  </div>
+  <p id="txSummary" class="tx-summary"></p>
+  <div id="txBody"></div>
+  <p class="msg" id="txMsg" role="status" aria-live="polite"></p>
+  <div class="tx-foot">
+    <button type="button" id="txSave">Add these courses</button>
+    <button type="button" class="btn-ghost" id="txCancel">Cancel</button>
+  </div>
+</dialog>
 
 <dialog id="helpDialog" aria-labelledby="helpTitle">
   <div class="dlg-head">
@@ -107,6 +125,10 @@
     <dd>A course from another department that looks a lot like one of your major’s electives. Some departments will count it toward your major if you ask. Show it to your advisor.</dd>
     <dt>What does “prerequisite needs a check” mean?</dt>
     <dd>The course asks for something Pathfinder can’t verify, like instructor consent or junior standing. Read the requirement, or ask the department.</dd>
+    <dt>Is it safe to upload my transcript?</dt>
+    <dd>Yes. Pathfinder reads the file inside your browser. It is never sent to UM or anyone else, and it isn’t stored. Only the course codes you approve are saved, in this browser. A PDF works best. For a scan or photo, open your transcript in a browser and use Print → Save as PDF, or copy and paste its text.</dd>
+    <dt>What about courses from other colleges, AP or dual credit?</dt>
+    <dd>They go under “Transfer &amp; other courses”. Match each one to the UM course it equals, or leave it as “no direct equivalent”. Pathfinder suggests matches, but the Registrar decides official transfer credit, so check your degree audit.</dd>
     <dt>Where do I find my course codes?</dt>
     <dd>On your unofficial transcript or your degree audit. A code is a subject plus a number, like “WRIT 101” or “BIOB 160”.</dd>
     <dt>Who can help me decide?</dt>
@@ -152,18 +174,39 @@
       <h3 id="takenLbl">3. Courses you’ve taken</h3>
       <details class="help"><summary>Help<span class="sr-only"> with courses taken</span></summary>
         <p>Find course codes like “WRIT 101” on your unofficial transcript or degree audit. Pathfinder uses them to check prerequisites, show your progress, and suggest a good next course. First semester? Skip this.</p></details>
-      <label for="takenInput">Add a course by code or title</label>
+      <div class="upload">
+        <label class="btn-ghost file-btn upload-btn">Upload your unofficial transcript<input type="file" id="txFile" accept=".pdf,.txt,.htm,.html,application/pdf,text/plain,text/html" aria-describedby="txFileHint"></label>
+        <p class="hint" id="txFileHint">PDF works best. It’s read inside this browser and never uploaded. You’ll review every course before anything is added.</p>
+      </div>
+      <label for="takenInput">Or add a UM course by code or title</label>
       <div class="row">
         <input id="takenInput" autocomplete="off" placeholder="e.g. CSCI 135 or WRIT 101">
         <button type="button" id="takenAdd">Add</button>
       </div>
       <details>
         <summary>Paste a list instead</summary>
-        <label for="takenPaste">Paste course codes (from a transcript or degree audit)</label>
+        <label for="takenPaste">Paste course codes, or the text of your transcript</label>
         <textarea id="takenPaste" rows="4" placeholder="WRIT 101, M 115, PSYX 100S …"></textarea>
         <button type="button" id="takenPasteBtn">Add all</button>
       </details>
       <ul class="chips" id="takenChips" aria-label="Courses taken"></ul>
+    </section>
+
+    <section class="field-group" aria-labelledby="xferLbl">
+      <h3 id="xferLbl">Transfer &amp; other courses</h3>
+      <details class="help"><summary>Help<span class="sr-only"> with transfer courses</span></summary>
+        <p>Courses from other colleges, AP exams or dual credit. Match each one to the UM course it equals, and Pathfinder counts it like a UM course for prerequisites and requirements. If it doesn’t match any one UM course, leave it as “no direct equivalent”. The Registrar decides official transfer credit, so check your degree audit.</p></details>
+      <ul class="xfer-list" id="xferList" aria-label="Transfer and other courses"></ul>
+      <p class="hint" id="xferEmpty">Nothing here yet. Courses from other schools appear here after you upload a transcript, or add one below.</p>
+      <button type="button" class="btn-ghost btn-small" id="xferMatchBtn" hidden>Match to UM courses</button>
+      <details>
+        <summary>Add a course from another school</summary>
+        <label for="xferCode">Course code and title, as the other school lists it</label>
+        <input id="xferCode" autocomplete="off" placeholder="e.g. ENG 101 English Composition, or AP Psychology">
+        <label for="xferSchool" class="mt-s">School (optional)</label>
+        <input id="xferSchool" autocomplete="off" placeholder="e.g. Flathead Valley Community College">
+        <button type="button" id="xferAdd" class="mt-s">Add and choose a UM equivalent</button>
+      </details>
     </section>
 
     <section class="field-group" aria-labelledby="planLbl">
@@ -276,6 +319,7 @@
 
 <script src="config.js"></script>
 <script src="knowledge.js"></script>
+<script src="transcript.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
