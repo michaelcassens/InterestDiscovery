@@ -387,14 +387,17 @@ function domainProfile() {
 }
 function jobLinks(role) {
   const loc = (S.location || '').trim(); const q = encodeURIComponent(role); const l = encodeURIComponent(loc);
-  return `<div class="links">
+  return `<div class="links"><span class="links-lbl">Jobs ${loc ? `near <strong>${esc(loc)}</strong>` : '<strong>anywhere</strong>'}:</span>
     <a href="https://www.linkedin.com/jobs/search/?keywords=${q}${loc ? '&location=' + l : ''}" target="_blank" rel="noopener">LinkedIn jobs<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
     <a href="https://www.indeed.com/jobs?q=${q}${loc ? '&l=' + l : ''}" target="_blank" rel="noopener">Indeed<span class="sr-only"> listings for ${esc(role)} (opens in new tab)</span></a>
     <a href="https://www.usajobs.gov/Search/Results?k=${q}${loc ? '&l=' + l : ''}" target="_blank" rel="noopener">USAJOBS<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
+    <span class="links-sep" aria-hidden="true">|</span>
     <a href="https://www.onetonline.org/find/quick?s=${q}" target="_blank" rel="noopener">O*NET skills &amp; pay<span class="sr-only"> for ${esc(role)} (opens in new tab)</span></a>
   </div>`;
 }
 function renderCareers() {
+  // The location form lives just above the job links; park it while the panel is rebuilt.
+  $('locHome').append($('locForm'));
   const prof = domainProfile();
   if (!prof.length) { $('careers').innerHTML = emptyState('Tell Pathfinder what you study or what you’re curious about. It will show the skills you’re building, the careers they lead to, and links to live job listings.', [[1, 'Get started']]); return; }
   const top = prof.slice(0, 4); const ids = new Set(top.map(x => x.d.id));
@@ -404,6 +407,7 @@ function renderCareers() {
     ${top.map(x => `<div class="dom"><div class="dom-head"><span>${esc(x.d.name)}</span><span>${x.pct}% of your strongest area</span></div>
       <div class="meter" aria-hidden="true"><span style="width:${x.pct}%"></span></div>
       ${x.src.length ? `<p class="rule">From: ${x.src.slice(0, 8).map(esc).join(', ')}</p>` : '<p class="rule">From your interests and program choices</p>'}</div>`).join('')}
+    <div id="locSlot" class="loc-slot"></div>
     <div class="cols">
       <div><h3>Learning outcomes you're developing</h3><ul>${top.flatMap(x => x.d.outcomes.map(o => `<li>${esc(o)} <span class="k">(${esc(x.d.name)})</span></li>`)).join('')}</ul></div>
       <div><h3>${combos.length ? 'Hybrid roles your combination opens' : 'Combine areas to open hybrid roles'}</h3>
@@ -414,6 +418,7 @@ function renderCareers() {
     <h3>Roles to explore in each area</h3>
     ${top.slice(0, 3).map(x => `<h4>${esc(x.d.name)}</h4>${x.d.careers.slice(0, 4).map(r => `<div class="role"><h4>${esc(r)}</h4>${jobLinks(r)}</div>`).join('')}`).join('')}
     <p class="hint">Job links open live searches on each site. LinkedIn may ask you to sign in. Also search UM’s Handshake through the Career Development office. O*NET (U.S. Dept. of Labor) lists the skills, education and typical pay for each role so you can compare against your coursework.</p>`;
+  $('locSlot').append($('locForm'));
 }
 
 // ---------------- rendering: why ----------------
@@ -676,8 +681,13 @@ syncLoc();
 $('locForm').onsubmit = e => {
   e.preventDefault();
   S.location = $('loc').value.trim(); $('loc').value = S.location;
+  const had = document.activeElement;
   save(); renderCareers();
-  $('locStatus').textContent = locMsg(S.location);
+  if (had && had !== document.body) had.focus();   // moving the form drops focus; put it back
+  // Show that something changed: count the updated searches and briefly highlight them.
+  const n = document.querySelectorAll('#careers .links').length;
+  $('locStatus').textContent = n ? `Updated ${n} job search${n === 1 ? '' : 'es'} below to ${S.location || 'anywhere'}.` : locMsg(S.location);
+  document.querySelectorAll('#careers .links').forEach(el => el.classList.add('just-updated'));
 };
 $('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); wizShow(1); say('Cleared. Let’s start again.'); } };
 $('exportBtn').onclick = () => {

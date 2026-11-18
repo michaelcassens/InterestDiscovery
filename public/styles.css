@@ -108,7 +108,14 @@ main:focus { outline: none; }
 .role { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
 .role h4 { margin: 0 0 4px; }
 .role .links { font-size: .86rem; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.links-lbl { color: var(--ink); }
+.links-sep { color: #6b6457; }
+.links.just-updated { animation: flashUpdate 2s ease-out; border-radius: 4px; }
+@keyframes flashUpdate { 0%, 40% { background: var(--green-bg); box-shadow: 0 0 0 3px var(--green-bg); } 100% { background: transparent; box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .links.just-updated { animation: none; } }
 .loc { max-width: 440px; margin-bottom: 14px; }
+.loc-slot .loc { max-width: none; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 6px 0 18px; }
+.loc-slot .loc .row { max-width: 440px; }
 .loc .msg { margin: 6px 0 0; }
 .why-item { margin-bottom: 14px; }
 .why-item h3 { margin: 0 0 4px; color: var(--maroon-dark); font-size: 1.05rem; }
