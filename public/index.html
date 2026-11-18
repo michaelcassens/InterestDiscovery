@@ -120,7 +120,7 @@
     <dt>Is this my official degree audit?</dt>
     <dd>No. Pathfinder is for exploring ideas. Your degree audit and your advisor have the final word on what counts toward your degree.</dd>
     <dt>Where is my information saved?</dt>
-    <dd>Only in this web browser on this device. Nothing is sent to UM or anyone else. Use “Download my plan” to keep a copy or move it to another computer.</dd>
+    <dd>Only in this web browser on this device. Nothing is sent to UM or anyone else. Use “Download as Word document” or “Print or save as PDF” to share it with your advisor, and “Save a backup file” to move it to another computer.</dd>
     <dt>What does “possible substitution” mean?</dt>
     <dd>A course from another department that looks a lot like one of your major’s electives. Some departments will count it toward your major if you ask. Show it to your advisor.</dd>
     <dt>What does “prerequisite needs a check” mean?</dt>
@@ -216,8 +216,15 @@
     </section>
 
     <div class="profile-actions">
-      <button type="button" id="exportBtn" class="btn-ghost">Download my plan</button>
-      <label class="btn-ghost file-btn">Load a plan<input type="file" id="importFile" accept="application/json"></label>
+      <h3 class="keep-h">Keep your plan</h3>
+      <button type="button" id="docxBtn">Download as Word document</button>
+      <button type="button" id="printBtn" class="btn-ghost">Print or save as PDF</button>
+      <details class="backup">
+        <summary>Back up or move your plan</summary>
+        <p class="hint">A backup file opens your plan in Pathfinder on another computer or browser. It isn’t meant for reading.</p>
+        <button type="button" id="exportBtn" class="btn-ghost">Save a backup file</button>
+        <label class="btn-ghost file-btn">Load a backup file<input type="file" id="importFile" accept="application/json,.json"></label>
+      </details>
       <button type="button" id="resetBtn" class="btn-ghost">Start over</button>
     </div>
     <p class="msg" id="profileMsg" role="status" aria-live="polite"></p>
@@ -317,7 +324,11 @@
   <p>Course and program data are read directly from the official <a href="https://catalog.umt.edu/" id="srcLink">University of Montana Academic Catalog</a> and refreshed automatically. Suggestions are exploratory; confirm substitutions and requirements with your advisor and degree audit.</p>
 </footer>
 
+<!-- Filled just before printing; only this shows on paper or in a saved PDF. -->
+<div id="printDoc" class="print-doc" lang="en-US"></div>
+
 <script src="config.js"></script>
+<script src="plandoc.js"></script>
 <script src="knowledge.js"></script>
 <script src="transcript.js"></script>
 <script src="app.js"></script>

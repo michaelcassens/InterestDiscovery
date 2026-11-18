@@ -333,7 +333,8 @@ function renderReqs() {
 }
 
 // ---------------- rendering: minors & certificates ----------------
-function renderMinors() {
+// Minors and certificates ranked by how close the student is (shared by the tab and the plan document).
+function minorRows() {
   const done = takenBases(), plan = plannedBases();
   const exp = expandInterests(S.interests);
   const rows = [];
@@ -352,12 +353,18 @@ function renderMinors() {
     rows.push({ p, d, pl, credits, fit, fitHits: [...fitHits], score });
   }
   rows.sort((a, b) => b.score - a.score);
+  for (const r of rows) {
+    r.pct = r.p._hours ? Math.min(100, Math.round(100 * r.credits / r.p._hours)) : null;
+    r.remaining = [...r.p._codes].filter(b => !done.has(b) && !plan.has(b)).map(b => byBase.get(b)).filter(Boolean);
+    if (exp.length) r.remaining.sort((a, b) => interestScore(b, exp).score - interestScore(a, exp).score);
+  }
+  return rows;
+}
+function renderMinors() {
+  const rows = minorRows();
   if (!rows.length) { $('minors').innerHTML = emptyState('Many students are closer to a minor or certificate than they think. Add your interests or the courses you’ve taken, and Pathfinder will show which ones you’re building toward.', [[2, 'Add my interests'], [3, 'Add courses I’ve taken']]); return; }
   $('minors').innerHTML = rows.slice(0, 15).map(r => {
-    const p = r.p; const pct = p._hours ? Math.min(100, Math.round(100 * r.credits / p._hours)) : null;
-    const remaining = [...p._codes].filter(b => !done.has(b) && !plan.has(b)).map(b => byBase.get(b)).filter(Boolean);
-    const exp2 = expandInterests(S.interests);
-    remaining.sort((a, b) => (exp2.length ? interestScore(b, exp2).score - interestScore(a, exp2).score : 0));
+    const p = r.p, pct = r.pct, remaining = r.remaining;
     return `<article class="prog"><h3>${esc(p.name)}${typeBadge(p)}</h3>
       <p class="meta">${r.d.length} taken · ${r.pl.length} planned${p.totalHours ? ` · about ${r.credits} of ${esc(p.totalHours)} credits` : ''}${r.fitHits.length ? ` · fits your interest in ${r.fitHits.map(esc).join(', ')}` : ''}</p>
       ${pct !== null ? `<div class="meter" role="img" aria-label="About ${pct}% of credits complete or planned"><span style="width:${pct}%"></span></div>` : ''}
@@ -870,6 +877,126 @@ $('helpBtn').onclick = () => $('helpDialog').showModal();
 $('helpClose').onclick = () => $('helpDialog').close();
 $('helpWizard').onclick = () => wizShow(1);
 
+// ---------------- plan document ----------------
+// Describe the student's plan as simple blocks; plandoc.js turns them into a Word file or a print view.
+function planBlocks() {
+  const done = takenBases(), B = [];
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const course = code => findCourse(code);
+  const credits = c => (c && c.credits) || '';
+  B.push({ t: 'h1', text: 'My UM Pathfinder plan' });
+  B.push({ t: 'p', text: `Made ${today} from the ${D.catalogYear || 'University of Montana Academic Catalog'}.` });
+  B.push({ t: 'p', parts: [{ text: 'This is a plan for exploring, not an official record. ', bold: true },
+    { text: 'Your degree audit and your academic advisor have the final word on requirements, substitutions and transfer credit.' }] });
+
+  // What I study and what I'm curious about
+  B.push({ t: 'h2', text: 'What I study' });
+  const progs = myProgs();
+  if (progs.length) B.push({ t: 'list', items: progs.map(p => [{ text: p.name, bold: true }, { text: typeNote(p) ? ` (${typeNote(p)})` : '' }, { text: p.totalHours ? `, ${p.totalHours} credits` : '' }]) });
+  else B.push({ t: 'p', text: 'Undecided, or not added yet.' });
+  if (S.interests.length) { B.push({ t: 'h2', text: 'What I’m curious about' }); B.push({ t: 'p', text: S.interests.join(', ') }); }
+
+  // Courses I plan to take
+  B.push({ t: 'h2', text: 'Courses I plan to take' });
+  if (S.planned.length) {
+    const rows = S.planned.map(code => {
+      const c = course(code), b = baseOf(code);
+      const pre = c ? prereqStatus(c, done) : { state: 'none' };
+      const preText = { none: 'None listed', met: 'Met', check: 'Check with the department', missing: 'Not yet met' }[pre.state];
+      const links = courseToProgs.get(b) || [];
+      const mine = [...new Set(links.filter(l => S.programs.includes(l.prog.id)).map(l => l.prog.name))];
+      const other = [...new Set(links.filter(l => !S.programs.includes(l.prog.id) && l.prog.type !== 'major').map(l => l.prog.name))];
+      const counts = [...mine.map(n => `My ${n}`), ...other.slice(0, 2)].concat(other.length > 2 ? [other.length === 3 ? '1 more minor or certificate' : `${other.length - 2} more minors and certificates`] : []);
+      if (c && c.genEd.length) counts.push('Gen Ed: ' + c.genEd.join(', '));
+      return [code, c ? c.title : '', credits(c), c && c.offered ? c.offered : 'Not listed', preText, counts.join('; ') || 'Elective'];
+    });
+    B.push({ t: 'table', caption: `${rows.length} course${rows.length === 1 ? '' : 's'} saved to my plan`, head: ['Course', 'Title', 'Credits', 'Offered', 'Prerequisites', 'Counts toward'], rows });
+    const sum = S.planned.reduce((s, code) => s + credNum(course(code)), 0);
+    B.push({ t: 'p', text: `About ${sum} credits in total.` });
+  } else B.push({ t: 'p', text: 'No courses saved yet. Use “Save to plan” on any course idea.' });
+
+  // Courses I've taken
+  if (S.taken.length) {
+    B.push({ t: 'h2', text: 'Courses I’ve taken' });
+    B.push({ t: 'table', caption: `${S.taken.length} UM course${S.taken.length === 1 ? '' : 's'}`, head: ['Course', 'Title', 'Credits'],
+      rows: S.taken.map(code => { const c = course(code); return [code, c ? c.title : 'Not in the current catalog', credits(c)]; }) });
+  }
+  if (S.transfer.length) {
+    B.push({ t: 'h2', text: 'Transfer and other courses' });
+    B.push({ t: 'table', caption: 'Courses from other schools, AP or dual credit, and older UM course numbers', head: ['Course', 'Title', 'From', 'Counts at UM as'],
+      rows: S.transfer.map(t => [t.code || '(no number)', t.title, t.school, t.equiv ? `${t.equiv} ${course(t.equiv)?.title || ''}`.trim() : 'No direct equivalent']) });
+    B.push({ t: 'p', text: 'These equivalents are my own choices. The Registrar decides official transfer credit.' });
+  }
+
+  // Progress in my programs
+  if (progs.length) {
+    B.push({ t: 'h2', text: 'Progress in my programs' });
+    const plan = plannedBases();
+    for (const p of progs) {
+      const all = [...p._codes], d = all.filter(b => done.has(b)).length, pl = all.filter(b => plan.has(b) && !done.has(b)).length;
+      B.push({ t: 'h3', text: p.name });
+      B.push({ t: 'p', parts: [{ text: `${d} of ${all.length} listed courses taken, ${pl} planned. ` }, { text: 'Official requirements', url: p.url }] });
+    }
+  }
+
+  // Minors and certificates
+  const minors = minorRows().slice(0, 5);
+  if (minors.length) {
+    B.push({ t: 'h2', text: 'Minors and certificates I’m closest to' });
+    for (const r of minors) {
+      B.push({ t: 'h3', text: r.p.name + (typeNote(r.p) ? ` (${typeNote(r.p)})` : '') });
+      const facts = [`${r.d.length} taken, ${r.pl.length} planned`];
+      if (r.p.totalHours) facts.push(`about ${r.credits} of ${r.p.totalHours} credits`);
+      if (r.fitHits.length) facts.push(`fits my interest in ${r.fitHits.join(', ')}`);
+      B.push({ t: 'p', text: facts.join('; ') + '.' });
+      if (r.remaining.length) B.push({ t: 'p', parts: [{ text: 'Courses to look at next: ', bold: true }, { text: r.remaining.slice(0, 5).map(c => `${c.code} ${c.title}`).join('; ') }] });
+      B.push({ t: 'p', parts: [{ text: 'Official requirements', url: r.p.url }] });
+    }
+  }
+
+  // Skills and careers
+  const prof = domainProfile().slice(0, 3);
+  if (prof.length) {
+    B.push({ t: 'h2', text: 'Skills I’m building and careers they lead to' });
+    for (const x of prof) {
+      B.push({ t: 'h3', text: x.d.name });
+      B.push({ t: 'list', items: x.d.outcomes.slice(0, 3) });
+      B.push({ t: 'p', parts: [{ text: 'Roles to explore: ', bold: true }, { text: x.d.careers.slice(0, 4).join(', ') }] });
+    }
+    const ids = new Set(prof.map(x => x.d.id)), combos = K.combos.filter(c => ids.has(c.a) && ids.has(c.b));
+    if (combos.length) { B.push({ t: 'h3', text: 'Roles that combine my areas' }); B.push({ t: 'list', items: combos.map(c => [{ text: c.roles.join(', '), bold: true }, { text: `: ${c.why}` }]) }); }
+  }
+
+  // Next steps
+  B.push({ t: 'h2', text: 'Next steps' });
+  B.push({ t: 'list', items: [
+    'Bring this plan to my academic advisor and compare it with my degree audit.',
+    ...(S.transfer.some(t => t.equiv) ? ['Ask the Registrar or my advisor to confirm the transfer and older-course equivalents.'] : []),
+    'Check that each planned course is offered in the term I want, and register early.',
+    'Talk with UM Career Development about the roles above, and search Handshake for internships.',
+  ] });
+  return B;
+}
+function planFileName(ext) { return `UM-Pathfinder-plan-${new Date().toISOString().slice(0, 10)}.${ext}`; }
+async function downloadPlanDocx(btn) {
+  if (notReady()) return;
+  const label = btn.textContent; btn.disabled = true; btn.textContent = 'Making your document…';
+  try {
+    const blob = await PlanDoc.toDocx(planBlocks(), { title: 'My UM Pathfinder plan', subject: 'Course plan', description: 'Course plan made with UM Pathfinder' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = planFileName('docx'); a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    say('Your plan was downloaded as a Word document.');
+  } catch (e) { say(e.message || 'Could not make the document.'); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+function printPlan() {
+  if (notReady()) return;
+  $('printDoc').innerHTML = PlanDoc.toHTML(planBlocks());
+  const t = document.title; document.title = 'My UM Pathfinder plan';   // the default PDF file name
+  window.print();
+  document.title = t;
+}
+
 // ---------------- tabs ----------------
 function selectTab(btn) {
   document.querySelectorAll('[role=tab]').forEach(t => { const on = t === btn; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; $(t.getAttribute('aria-controls')).hidden = !on; });
@@ -945,9 +1072,12 @@ $('locForm').onsubmit = e => {
   document.querySelectorAll('#careers .links').forEach(el => el.classList.add('just-updated'));
 };
 $('resetBtn').onclick = () => { if (confirm('Clear your programs, interests and courses?')) { S = blank(); syncLoc(); renderAll(); wizShow(1); say('Cleared. Let’s start again.'); } };
+$('docxBtn').onclick = e => downloadPlanDocx(e.currentTarget);
+$('printBtn').onclick = printPlan;
+// Backup file (JSON): only for loading the plan back into Pathfinder.
 $('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify({ ...S, exportedAt: new Date().toISOString(), catalog: D.catalogYear }, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'um-pathfinder-plan.json'; a.click(); URL.revokeObjectURL(a.href);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = planFileName('json'); say('Backup saved. Use “Load a backup file” to open it in Pathfinder on any computer.'); a.click(); URL.revokeObjectURL(a.href);
 };
 $('importFile').onchange = async e => {
   try { const j = JSON.parse(await e.target.files[0].text()); S = Object.assign(blank(), j); syncLoc(); renderAll(); say('Plan loaded.'); }

@@ -44,6 +44,7 @@ git subtree push --prefix=um_pathfinder origin main
 | `server.js` | Serves the app and the cached catalog, and refreshes the cache in the background. |
 | `public/app.js` | Does all matching in the browser, so no student data leaves the device. |
 | `public/transcript.js` | Reads an unofficial transcript (PDF, saved web page, text, or pasted text) in the browser and finds each course's subject and number, title, grade and credits. It sorts courses into UM, in progress, and other schools (transfer, AP, dual credit). PDFs are read with pdf.js, which loads from cdnjs only when a student picks a PDF. The transcript itself is never uploaded or stored. |
+| `public/plandoc.js` | Turns a student's plan into a Word document (.docx, made in the browser with the `docx` library, which loads from jsDelivr only when someone downloads) or a print view for Print → Save as PDF. Both use real headings, lists and table header rows, and set the document title and language, for WCAG 2.1 AA. The JSON "backup file" remains only for loading a plan back into Pathfinder. |
 | `public/knowledge.js` | Holds the hand-written layer: skill areas, learning outcomes, careers, hybrid "combination" roles, interest synonyms and the case for interdisciplinary study. **Faculty and advisors should edit this file.** |
 
 ### Suggestion score

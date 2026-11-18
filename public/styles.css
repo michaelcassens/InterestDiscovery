@@ -218,4 +218,31 @@ dialog::backdrop { background: rgba(30, 10, 18, .45); }
 .tx-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; position: sticky; bottom: -20px; background: var(--card); padding-bottom: 4px; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 @media (max-width: 600px) { .tx-meta, .tx-note { margin-left: 0; } .eq { margin-left: 0; } dialog { padding: 16px 14px; } }
+/* ---- keep your plan ---- */
+.profile-actions .keep-h { flex: 1 1 100%; margin: 0 0 2px; font-size: 1rem; color: var(--maroon-dark); }
+.profile-actions #docxBtn, .profile-actions #printBtn { flex: 1 1 100%; font-size: .92rem; padding: 7px 10px; }
+.profile-actions .backup { flex: 1 1 100%; margin: 2px 0 0; }
+.profile-actions .backup summary { cursor: pointer; color: var(--maroon); font-size: .85rem; }
+.profile-actions .backup .btn-ghost, .profile-actions .backup .file-btn { margin: 4px 4px 0 0; }
+.profile-actions #resetBtn { margin-top: 4px; }
+
+/* ---- print view of the plan (Print → Save as PDF) ---- */
+@media screen { .print-doc { display: none; } }
+@media print {
+  body { background: #fff; }
+  body > *:not(.print-doc) { display: none !important; }
+  .print-doc { display: block; color: #000; font: 11pt/1.45 Calibri, "Segoe UI", Arial, sans-serif; }
+  .print-doc h1 { color: #70002E; font-size: 20pt; margin: 0 0 6pt; }
+  .print-doc h2 { color: #70002E; font-size: 14pt; margin: 16pt 0 4pt; border-bottom: 1pt solid #70002E; padding-bottom: 2pt; break-after: avoid; }
+  .print-doc h3 { color: #4f0020; font-size: 12pt; margin: 10pt 0 2pt; break-after: avoid; }
+  .print-doc p, .print-doc li { margin: 2pt 0; }
+  .print-doc table { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt; font-size: 9.5pt; }
+  .print-doc caption { text-align: left; font-weight: bold; padding-bottom: 3pt; }
+  .print-doc thead { display: table-header-group; }   /* repeat the header row on each page */
+  .print-doc th, .print-doc td { border: 0.75pt solid #999; padding: 3pt 5pt; text-align: left; vertical-align: top; }
+  .print-doc thead th { background: #70002E; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-doc tr { break-inside: avoid; }
+  .print-doc a { color: #000; }
+  .print-doc a::after { content: " (" attr(href) ")"; font-size: 8.5pt; word-break: break-all; }
+}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
