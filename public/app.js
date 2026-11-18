@@ -529,63 +529,92 @@ function addTaken(raw) {
 // ---------------- transcripts & transfer courses ----------------
 let UMSUBJ = new Set();
 const txCtx = { isUMSubject: s => UMSUBJ.has(s), findCourse };
-// Generic words that say little about what a course covers.
 const TITLE_STOP = new Set(['intro', 'principle', 'fundamental', 'foundation', 'survey', 'advanced', 'general', 'seminar', 'special', 'elementary', 'intermediate', 'applied', 'concept', 'issue', 'lab', 'laboratory', 'ii', 'iii', 'iv', 'ap', 'clep', 'ib', 'dual', 'exam', 'credit']);
+// Abbreviations common on transcripts (titles are cut to ~30 characters).
+const ABBR = { comp: 'computer', sci: 'science', prog: 'programming', lang: 'language', lit: 'literature', germ: 'german', amer: 'american',
+  chem: 'chemistry', bio: 'biology', biol: 'biology', hlth: 'health', ed: 'education', educ: 'education', mgmt: 'management', mktg: 'marketing',
+  tech: 'technology', wrtn: 'written', writ: 'writing', express: 'expression', hist: 'history', psych: 'psychology', assem: 'assembly',
+  arch: 'architecture', dev: 'development', env: 'environmental', envir: 'environmental', phys: 'physics', math: 'mathematics', stat: 'statistics',
+  stats: 'statistics', econ: 'economics', soc: 'sociology', anth: 'anthropology', engl: 'english', govt: 'government', pol: 'political',
+  int: 'international', intl: 'international', org: 'organic', gen: 'general', calc: 'calculus', alg: 'algebra', geog: 'geography', comm: 'communication',
+  info: 'information', sys: 'systems', mgt: 'management', acct: 'accounting', fin: 'finance', bus: 'business', lab: 'laboratory', anat: 'anatomy',
+  physiol: 'physiology', micro: 'microbiology', theo: 'theory', crit: 'critical', cult: 'culture', civ: 'civilization', pract: 'practice' };
+// Words a transcript uses where UM's titles use another (adds the UM word, keeps the original).
+const SYN = { composition: 'writing', expository: 'writing', rhetoric: 'writing', chorale: 'choir', chorus: 'choir', choral: 'choir' };
+const expand = t => String(t || '').replace(/[A-Za-z]+/g, w => { const k = w.toLowerCase(), a = ABBR[k] || w; return SYN[k] ? `${a} ${SYN[k]}` : a; });
 function titleVector(title) {
-  const v = new Map(); for (const t of tokens(title || '')) if (!TITLE_STOP.has(t)) v.set(t, (v.get(t) || 0) + (IDF.get(t) || 0));
+  const v = new Map(); for (const t of tokens(expand(title))) if (!TITLE_STOP.has(t)) v.set(t, (v.get(t) || 0) + (IDF.get(t) || 0));
+  // A synonym weighs as much as the word it stands in for ("writing" is common, "composition" is not).
+  for (const w of String(title || '').toLowerCase().match(/[a-z]+/g) || []) if (SYN[w]) { const o = v.get(stem(w)) || 0, k = stem(SYN[w]); if (o > (v.get(k) || 0)) v.set(k, o); }
   return { v, norm: Math.sqrt([...v.values()].reduce((a, x) => a + x * x, 0)) || 0 };
 }
-// Likely UM equivalents for a course from another school:
+const cosTV = (a, b) => { if (!a.norm || !b.norm) return 0; let d = 0; for (const [t, x] of a.v) { const y = b.v.get(t); if (y) d += x * y; } return d / (a.norm * b.norm); };
+let TITLE_VECS = null;   // catalog title vectors, built on first use
+const catTV = c => { if (!TITLE_VECS) TITLE_VECS = new Map(); if (!TITLE_VECS.has(c.code)) TITLE_VECS.set(c.code, titleVector(c.title)); return TITLE_VECS.get(c.code); };
+// Sequence number at the end of a title ("Calculus II" → 2), and whether it's a lab.
+const numeral = t => { const m = String(t || '').trim().match(/\b(I{1,3}|IV|[1-4])\s*(?:lab(?:oratory)?)?$/i); return m ? ({ I: 1, II: 2, III: 3, IV: 4 }[m[1].toUpperCase()] || +m[1]) : 0; };
+const isLab = t => /\blab(oratory)?\b/i.test(expand(t));
+// Do two titles describe the same kind of course (both labs or neither; same I/II/III)?
+const compatible = (a, b) => isLab(a) === isLab(b) && (!numeral(a) || !numeral(b) || numeral(a) === numeral(b));
+const levelOf = num => { const n = parseInt(num, 10); return n >= 1000 ? Math.floor(n / 1000) * 100 : Math.floor(n / 100) * 100; };
+function titleSim(tv, title) { return cosTV(tv, titleVector(title)); }
+
+// Likely UM equivalents for a course from another school, or an older UM course number:
 //  1. the same subject and number at UM (Montana's public colleges share course numbers);
 //  2. the same number in a related UM subject (ENGL 101 → WRIT 101; see knowledge.js);
 //  3. UM courses with similar titles at a similar level, favoring related subjects.
-const levelOf = num => { const n = parseInt(num, 10); return n >= 1000 ? Math.floor(n / 1000) * 100 : Math.floor(n / 100) * 100; };
-function titleSim(tv, title) {
-  if (!tv.norm) return 0;
-  const sv = titleVector(title); let dot = 0;
-  for (const [t, x] of tv.v) { const y = sv.v.get(t); if (y) dot += x * y; }
-  return sv.norm ? dot / (tv.norm * sv.norm) : 0;
-}
 function suggestEquiv(item) {
-  const [subj, num] = (item.code || '').split(' ');
+  const cm = (item.code || '').match(/^(.+) (\S+)$/), subj = cm ? cm[1] : '', num = cm ? cm[2] : '';   // "H PE 146" → "H PE", "146"
   const same = subj && UMSUBJ.has(subj) ? findCourse(item.code) : null;
-  const related = (K.transferSubjects || {})[subj] || [];
+  const related = [...((K.transferSubjects || {})[subj] || []), ...(UMSUBJ.has(subj) ? [subj] : [])];
   const relatedSame = num ? related.map(r => findCourse(`${r} ${num}`)).filter(c => c && (!same || c.base !== same.base)) : [];
   // No course number (AP, CLEP, dual credit): assume an introductory, 100-level course.
   const tv = titleVector(item.title), lvl = num ? levelOf(num) : 100, similar = [];
+  const n0 = numeral(item.title), lab0 = isLab(item.title);
   if (tv.norm) {
     const skip = new Set([same, ...relatedSame].filter(Boolean).map(c => c.base));
     for (const c of byCode.values()) {
       if (c.level >= 500 || skip.has(c.base)) continue;
+      const t = cosTV(tv, catTV(c));
+      if (t < 0.15) continue;
       const e = VEC.get(c.code); let dot = 0;
-      for (const [t, x] of tv.v) { const y = e.v.get(t); if (y) dot += x * y; }
-      let sim = dot / (tv.norm * e.norm);
-      if (!sim) continue;
-      if (lvl !== null) { const d = Math.abs(Math.floor(c.level / 100) * 100 - lvl); sim *= d === 0 ? 1 : d === 100 ? 0.6 : 0.25; }
-      if (related.includes(c.subject)) sim *= 1.6;
-      if (sim > 0.2) similar.push({ c, sim });
+      for (const [k, x] of tv.v) { const y = e.v.get(k); if (y) dot += x * y; }
+      let sim = 0.75 * t + 0.25 * (dot / (tv.norm * e.norm));
+      const d = Math.abs(Math.floor(c.level / 100) * 100 - lvl); sim *= d === 0 ? 1 : d === 100 ? 0.6 : 0.25;
+      const rel = related.includes(c.subject); if (rel) sim *= 2;
+      const n1 = numeral(c.title); if (n0 && n1) sim *= n0 === n1 ? 1.3 : 0.6;
+      else if (!n0 && n1 > 1) sim *= 0.9;   // no number on the transcript: the first course in a sequence is likelier
+      if (lab0 !== isLab(c.title)) sim *= 0.5;
+      if (sim > 0.2) similar.push({ c, sim, t, rel, lvlMatch: d === 0 });
     }
     similar.sort((x, y) => y.sim - x.sim);
   }
-  // Pre-select only when confident: same number (and the titles agree, or there's no title).
+  // Pre-select only when confident.
   let pre = '';
-  if (same && (!tv.norm || titleSim(tv, same.title) > 0.15)) pre = same.code;
-  else if (!same && relatedSame.length === 1 && titleSim(tv, relatedSame[0].title) > 0.15) pre = relatedSame[0].code;
+  if (same && (!tv.norm || (titleSim(tv, same.title) > 0.15 && compatible(item.title, same.title)))) pre = same.code;
+  // Old UM numbers rarely line up with today's, so for those a same-number match needs strong title agreement too.
+  else if (!same && relatedSame.length === 1 && titleSim(tv, relatedSame[0].title) >= (item.group === 'older' ? 0.75 : 0.4) && compatible(item.title, relatedSame[0].title)) pre = relatedSame[0].code;
+  else if (!same && similar[0] && similar[0].rel && similar[0].lvlMatch && similar[0].t >= (tv.v.size > 1 ? 0.75 : 0.95) && compatible(item.title, similar[0].c.title) &&
+    !(similar[1] && similar[1].sim > similar[0].sim * 0.85)) pre = similar[0].c.code;
   return { same, relatedSame, similar: similar.slice(0, 3).map(x => x.c), pre };
 }
 
+const OLDER = 'UM, older course number';
+const isMatch = g => g === 'transfer' || g === 'older';   // groups that get a UM-equivalent picker
 let TX = null;   // review dialog state: { mode: 'add' | 'edit', rows, opener }
 function openReview(items, mode = 'add') {
   const have = takenBases();
   TX = { mode, opener: document.activeElement, rows: items.map((it, i) => {
     const r = { ...it, i, group: it.group || 'transfer' };
-    if (r.group === 'transfer') {
+    // A UM course that isn't in today's catalog: an older or renumbered course to match.
+    if (r.group === 'um' && !r.known && mode === 'add') { r.group = 'older'; r.school = OLDER; }
+    if (isMatch(r.group)) {
       r.sugg = suggestEquiv(r);
       r.equiv = it.equiv !== undefined ? it.equiv : r.sugg.pre;
       r.extra = r.equiv && ![r.sugg.same?.code, ...r.sugg.relatedSame.map(c => c.code), ...r.sugg.similar.map(c => c.code)].includes(r.equiv) ? findCourse(r.equiv) : null;
       r.already = mode === 'add' && S.transfer.some(t => t.id === `${r.code || r.title}|${r.school}`);
     } else r.already = have.has(baseOf(r.code));
-    r.include = mode === 'edit' || (!r.noCredit && !r.already);
+    r.include = mode === 'edit' || (!r.noCredit && !r.already && !r.graduate);
     return r;
   }) };
   renderReview();
@@ -597,19 +626,20 @@ function eqLabel(r) {
 }
 function renderReview() {
   const R = TX.rows, by = g => R.filter(r => r.group === g);
-  const um = by('um'), pr = by('progress'), tr = by('transfer');
+  const um = by('um'), pr = by('progress'), tr = by('transfer'), od = by('older');
   const edit = TX.mode === 'edit';
   $('txTitle').textContent = edit ? 'Match your transfer courses' : 'Review the courses we found';
   $('txSummary').innerHTML = edit
     ? 'For each course, choose the UM course it equals, or leave it as “no direct equivalent”.'
-    : `Found <strong>${R.length}</strong> course${R.length === 1 ? '' : 's'}: ${um.length} from UM, ${pr.length} in progress, ${tr.length} from other schools. ` +
+    : `Found <strong>${R.length}</strong> course${R.length === 1 ? '' : 's'}: ${um.length + od.length} from UM${od.length ? ` (${od.length} with older course numbers)` : ''}, ${pr.length} in progress, ${tr.length} from other schools. ` +
       'Nothing is added until you click the button at the bottom.';
-  const meta = r => [r.group === 'transfer' && r.school ? esc(r.school) : '', r.grade ? `Grade ${esc(r.grade)}` : '', r.credits != null ? `${r.credits} credits` : '', r.term ? esc(r.term) : ''].filter(Boolean).join(' · ');
+  const meta = r => [r.group === 'transfer' && r.school ? esc(r.school) : '', r.graduate ? 'Graduate course' : '', r.grade ? `Grade ${esc(r.grade)}` : '', r.credits != null ? `${r.credits} credits` : '', r.term ? esc(r.term) : ''].filter(Boolean).join(' · ');
   const check = r => edit ? '' : `<input type="checkbox" data-txi="${r.i}" ${r.include ? 'checked' : ''}> `;
   const notes = r => [
     r.already ? '<span class="tx-note">Already in your profile</span>' : '',
     r.noCredit ? `<span class="tx-note tx-warn">Grade ${esc(r.grade)} usually earns no credit, so it starts unchecked</span>` : '',
-    r.group !== 'transfer' && !r.known ? '<span class="tx-note tx-warn">Not in the current UM catalog (it may have been renumbered)</span>' : '',
+    r.graduate && !r.noCredit && TX.mode !== 'edit' ? '<span class="tx-note">Graduate-level, so it starts unchecked</span>' : '',
+    !isMatch(r.group) && !r.known ? '<span class="tx-note tx-warn">Not in the current UM catalog (it may have been renumbered)</span>' : '',
   ].join('');
   const simpleRow = r => `<li class="tx-row"><label>${check(r)}<strong>${esc(r.code)}</strong> ${esc(r.title)}</label>
     <div class="tx-meta">${meta(r)}</div>${notes(r)}</li>`;
@@ -631,10 +661,12 @@ function renderReview() {
   $('txBody').innerHTML =
     section('UM courses', 'Uncheck any you don’t want added.', um, simpleRow) +
     section('In progress', 'Courses you’re taking now. Pathfinder counts them as taken so it can suggest what comes next.', pr, simpleRow) +
+    section('Older UM course numbers',
+      'UM has renumbered many courses since these were taken. Pick today’s equivalent, or leave “No direct equivalent”.' + (edit ? '' : ` Pathfinder pre-selected ${od.filter(r => r.equiv).length} of ${od.length} where the match was clear, so check them.`), od, xferRow) +
     section(edit ? 'Transfer &amp; other courses' : 'From other schools',
       'Pick the UM course each one equals. “Same number” means UM uses the same course number; Montana’s public colleges share course numbers. If nothing fits, choose “No direct equivalent”. The Registrar makes the official decision.', tr, xferRow);
   // A search box for any UM course, on each transfer row.
-  tr.forEach(r => attachCombo($(`eq-${r.i}`), { label: 'Matching UM courses', source: courseMatchesAll,
+  [...od, ...tr].forEach(r => attachCombo($(`eq-${r.i}`), { label: 'Matching UM courses', source: courseMatchesAll,
     onPick: it => { r.equiv = it.id; $(`eq-${r.i}`).value = ''; updateEq(r); }, onEnter: () => {} }));
   $('txMsg').textContent = '';
   updateSaveLabel();
@@ -676,14 +708,14 @@ function saveReview() {
   for (const r of TX.rows) {
     if (edit) { const t = S.transfer.find(x => x.id === r.id); if (t) t.equiv = r.equiv; continue; }
     if (!r.include) continue;
-    if (r.group === 'transfer') {
+    if (isMatch(r.group)) {
       const id = `${r.code || r.title}|${r.school}`, t = S.transfer.find(x => x.id === id);
       if (t) t.equiv = r.equiv;
       else { S.transfer.push({ id, code: r.code, title: r.title, credits: r.credits, grade: r.grade, school: r.school, term: r.term, equiv: r.equiv }); xf++; }
     } else if (pushTaken(r.code)) um++;
   }
   closeReview(); renderAll();
-  say(edit ? 'Saved your UM equivalents.' : `Added ${um} UM course${um === 1 ? '' : 's'}${xf ? ` and ${xf} from other schools (under “Transfer & other courses”)` : ''}.`);
+  say(edit ? 'Saved your UM equivalents.' : `Added ${um} UM course${um === 1 ? '' : 's'}${xf ? ` and ${xf} more to match (under “Transfer & other courses”)` : ''}.`);
 }
 // Text from a paste box: plain lists of UM courses are added straight away;
 // anything with other-school courses, in-progress courses or no-credit grades opens the review.
@@ -691,7 +723,7 @@ function importText(text) {
   if (notReady()) return;
   const items = Transcript.parse(String(text).split(/\r?\n/), txCtx);
   if (!items.length) return say('No course codes found. Codes look like “WRIT 101”: a subject and a number.');
-  if (items.every(i => i.group === 'um' && !i.noCredit)) { const n = items.filter(i => pushTaken(i.code)).length; say(`Added ${n} course${n === 1 ? '' : 's'}.`); renderAll(); return; }
+  if (items.every(i => i.group === 'um' && i.known && !i.noCredit)) { const n = items.filter(i => pushTaken(i.code)).length; say(`Added ${n} course${n === 1 ? '' : 's'}.`); renderAll(); return; }
   openReview(items);
 }
 async function importFile(input) {
@@ -862,7 +894,7 @@ $('txFile').onchange = e => importFile(e.target);
 $('wTxFile').onchange = e => importFile(e.target);
 $('xferAdd').onclick = addOtherCourse;
 $('xferCode').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addOtherCourse(); } };
-$('xferMatchBtn').onclick = () => openReview(S.transfer.map(t => ({ ...t, group: 'transfer' })), 'edit');
+$('xferMatchBtn').onclick = () => openReview(S.transfer.map(t => ({ ...t, group: t.school === OLDER ? 'older' : 'transfer' })), 'edit');
 $('txSave').onclick = saveReview;
 $('txClose').onclick = $('txCancel').onclick = closeReview;
 $('txDialog').addEventListener('close', () => { if (TX) closeReview(); });   // Escape key

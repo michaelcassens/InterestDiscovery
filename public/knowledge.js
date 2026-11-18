@@ -142,5 +142,8 @@ window.KNOWLEDGE = {
     CJ: ['CJUS'], CRJ: ['CJUS'], CRIM: ['CJUS', 'SOCI'], EDUC: ['EDU'], ED: ['EDU'], NURS: ['NRSG'], NUR: ['NRSG'],
     HLTH: ['HTH', 'CHTH'], PE: ['HHP', 'KIN', 'ACT'], PHED: ['HHP', 'KIN'], KINE: ['KIN'], NUT: ['NUTR'], FN: ['NUTR'],
     NAS: ['NASX'], AIS: ['NASX'], WGS: ['WGSS'], WMST: ['WGSS'], LING: ['LING'], FOR: ['FORS'],
+    // Older UM subject codes, from before UM adopted Montana's common course numbers.
+    ENEX: ['WRIT'], LS: ['GH', 'PHL', 'CLAS'], HC: ['HONR'], BIOC: ['BCH'], 'H PE': ['HHP', 'ACT', 'KIN'], HPE: ['HHP', 'ACT', 'KIN'],
+    'C&I': ['EDU', 'EDEC', 'EDSP'],   // (MATH, CHEM, CS, PSYC, GERM … are listed above)
   }
 };

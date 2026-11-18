@@ -67,5 +67,5 @@ git subtree push --prefix=um_pathfinder origin main
 
 - Requirement rules such as "choose 2 of" are shown but not fully enforced, so progress numbers are approximate. The degree audit is still the official record.
 - The catalog doesn't publish program learning outcomes, so the outcomes shown come from `knowledge.js`.
-- Transcript reading was tested with sample transcripts in a typical Banner layout, not yet with real UM transcripts. Scanned images can't be read, because there's no OCR. Credit with no course number (like AP exams) has to be added by hand.
+- Transcript reading was tested on a real UM unofficial transcript PDF from Banner (85 courses, including AP credit, repeats and courses from the 1990s) and on sample transcripts. UM courses that aren't in today's catalog are listed as **older UM course numbers**, so students can match them to current courses. Pathfinder only pre-selects a match when the titles clearly agree. Scanned images can't be read, because there's no OCR.
 - Job links open live searches on LinkedIn, Indeed, USAJOBS and O*NET. The app does not scrape LinkedIn, because that breaks LinkedIn's terms and requires a login.

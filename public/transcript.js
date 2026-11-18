@@ -19,8 +19,7 @@ function loadPdfJs() {
   });
 }
 
-// Rebuild text lines from a PDF page's positioned text pieces. Handles
-// two-column layouts by reading the left column, then the right.
+// Rebuild text lines from a PDF page's positioned text pieces.
 function pageLines(items, width) {
   const rows = new Map();
   for (const it of items) {
@@ -31,15 +30,17 @@ function pageLines(items, width) {
   }
   const ys = [...rows.keys()].sort((a, b) => b - a);
   ys.forEach(y => rows.get(y).sort((a, b) => a.x - b.x));
-  // Two columns if many rows have a gap spanning the middle of the page.
-  const mid = width / 2;
-  const spans = ys.filter(y => { const r = rows.get(y); return r.some(p => p.x + p.w < mid - 4) && r.some(p => p.x > mid - 4); }).length;
-  const twoCol = ys.length > 10 && spans / ys.length > 0.3;
+  // A true two-column page has an empty gutter down the middle. A wide table
+  // (like a transcript's grade and credit columns) doesn't, so it stays one column.
+  const mid = width / 2, all = ys.flatMap(y => rows.get(y));
+  const gutterEmpty = !all.some(p => p.x < mid + 10 && p.x + p.w > mid - 10);
+  const both = ys.filter(y => { const r = rows.get(y); return r.some(p => p.x + p.w < mid) && r.some(p => p.x > mid); }).length;
+  const twoCol = gutterEmpty && ys.length > 10 && both / ys.length > 0.3;
   // Pieces that touch (gap ≈ 0) are one word split for kerning; a gap or an overlap means separate words.
   const join = parts => { let out = '', end = null; for (const p of parts) { const gap = end === null ? 0 : p.x - end; out += end === null ? p.s : (gap > 12 ? '\t' : gap > 1 || gap < -2 ? ' ' : '') + p.s; end = p.x + p.w; } return out; };
   if (!twoCol) return ys.map(y => join(rows.get(y)));
-  const left = ys.map(y => join(rows.get(y).filter(p => p.x < mid - 4))).filter(Boolean);
-  const right = ys.map(y => join(rows.get(y).filter(p => p.x >= mid - 4))).filter(Boolean);
+  const left = ys.map(y => join(rows.get(y).filter(p => p.x < mid))).filter(Boolean);
+  const right = ys.map(y => join(rows.get(y).filter(p => p.x >= mid))).filter(Boolean);
   return [...left, ...right];
 }
 async function readPdf(file) {
@@ -71,41 +72,46 @@ async function readFile(file) {
 }
 
 // ---------- finding courses in the text ----------
-// Subject (1–5 capitals) + number. UM uses 3 digits; other schools sometimes use 4 ("HIST 1100").
-const CODE = /(?:^|[\s\t(])([A-Z]{1,5})\s?(\d{3,4}[A-Z]{0,2})(?=$|[\s\t)*,;:])/;
+// Subject + number. Subjects are 1–5 capitals, and older UM transcripts also have
+// "C&I" and two-part subjects like "H PE". UM numbers have 3 digits; other schools
+// sometimes use 4 ("HIST 1100").
+const CODE = /(?:^|[\s\t(])([A-Z](?:[A-Z&]{0,4}| [A-Z]{2,3}))[\s\t]{0,3}(\d{3,4}[A-Z]{0,2})(?=$|[\s\t)*,;:])/;
 const CODE_G = new RegExp(CODE.source, 'g');
 // Words that look like a subject code but aren't (from totals, headers, addresses).
 const NOT_SUBJECT = new Set(('HRS HOURS GPA TERM TOTAL TOTALS PAGE CUM EARNED ATTEMPTED POINTS QUALITY PASSED CREDIT CREDITS ' +
   'ID MT ZIP BOX PO SUITE APT FALL SPRING SUMMER AUTUMN WINTER YEAR UG GR LD UD OF AND THE TO IN DOB SSN NO NUMBER ' +
   'TRANSFER INSTITUTION OVERALL CURRENT LEVEL STANDING DEAN HONORS GOOD').split(' '));
-const GRADE = /^(A|A-|B\+|B|B-|C\+|C|C-|D\+|D|D-|F|P|NP|CR|NC|W|WP|WF|I|IP|AU|S|U|N|T|TR|TA|TB|TC|TP|XF)$/;
+const GRADE_SRC = 'A|A-|B\\+|B|B-|C\\+|C|C-|D\\+|D|D-|F|P|NP|CR|NC|W|WP|WF|I|I[A-F]|IP|AU|S|U|N|T|TR|TA|TB|TC|TP|XF';
+const GRADE = new RegExp(`^(${GRADE_SRC})$`);
+const GLUED = new RegExp(`^(.*[a-z)\\]])(${GRADE_SRC})$`);    // "LaboratoryA" → "Laboratory" + "A"
 const NO_CREDIT = /^(F|NP|NC|W|WF|WP|I|AU|U|N|XF)$/;
-const SEC_TRANSFER = /transfer|credit accepted|advanced placement|\bap\b.*(exam|credit)|\bclep\b|dual (credit|enrollment)|military credit|\bibo?\b exam|international baccalaureate|test credit|credit by exam/i;
+const SEC_TRANSFER = /transfer credit|credit accepted|^\s*transfer\b|advanced placement|\bap\b.*(exam|credit)|\bclep\b|dual (credit|enrollment)|military credit|\bibo?\b exam|international baccalaureate|test credit|credit by exam/i;
 const SEC_PROGRESS = /in[- ]progress|currently enrolled|courses? (registered|scheduled)/i;
-const SEC_UM = /institution credit|university of montana|missoula college|\bum\b.*credit|^\s*(autumn|fall|spring|summer|winter)\s+(semester|term\s+)?\d{4}\b/i;
-const SCHOOL = /\b(college|university|community|institute|school|academy|polytechnic)\b/i;
-const titleCase = s => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\b(I|Ii|Iii|Iv)\b/g, m => m.toUpperCase());
+const SCHOOL = /\b(college|university|community|institute|school|academy|polytechnic|program)\b/i;
+const titleCase = s => /[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b([a-z])/g, c => c.toUpperCase()).replace(/\b(I|Ii|Iii|Iv|Bc|Ab)\b/g, m => m.toUpperCase());
 
-/* parse(lines, { isUMSubject, findCourse }) → [{ code, title, credits, grade,
-   group: 'um' | 'progress' | 'transfer', school, term }] */
+/* parse(lines, { isUMSubject, findCourse }) → [{ code, title, credits, grade, noCredit,
+   group: 'um' | 'progress' | 'transfer', school, term, known, graduate }]
+   A UM course that isn't in today's catalog (an older or renumbered course) comes back as
+   group 'um' with known: false; the app offers to match it to a current course. */
 function parse(lines, ctx) {
-  let group = 'um', school = '', term = '';
-  const out = [], seen = new Set();
-  for (let raw of lines) {
+  let group = 'um', school = '', term = '', sawSections = false;
+  const out = [];
+  for (const raw of lines) {
     const line = String(raw).replace(/ /g, ' ').trim(); if (!line) continue;
     const m = line.match(CODE);
-    // Section headers (lines without a course on them)
     if (!m) {
-      if (/^\s*(total|overall|cumulative|cum\b|term totals?|transcript totals?)/i.test(line)) continue;   // totals rows aren't headers
-      if (SEC_PROGRESS.test(line)) group = 'progress';
-      else if (SEC_TRANSFER.test(line)) { group = 'transfer'; school = ''; }
-      else if (SEC_UM.test(line) && group === 'progress') { /* stay in progress */ }
-      else if (/institution credit|courses? taken at (the )?university of montana/i.test(line)) { group = 'um'; school = ''; }
-      // In a transfer section, a line naming a school sets where the next courses came from.
-      // ("University of Montana Western" is a different campus, so it counts as a transfer school.)
-      if (group === 'transfer' && SCHOOL.test(line) && line.length < 90 && !SEC_TRANSFER.test(line))
-        school = line.replace(/^\s*\d{4,6}\s*[:\-]\s*/, '').replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-      const t = line.match(/\b(autumn|fall|spring|summer|winter)\s+(?:semester\s+)?(\d{4})\b/i); if (t) term = `${t[1][0].toUpperCase()}${t[1].slice(1).toLowerCase()} ${t[2]}`;
+      if (/^\s*(total|overall|cumulative|cum\b|current term|term totals?|transcript totals?|pre-system)/i.test(line)) continue;   // totals rows aren't headings
+      // Banner lists each transfer source as "1991-91: Advanced Placement Program" or "202250: Flathead Valley CC".
+      const src = line.match(/^\s*\d{4,6}(?:-\d{2,4})?\s*:\s*(.+)$/);
+      if (group === 'transfer' && src) { school = src[1].replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim(); continue; }
+      if (line.length <= 60 && SEC_PROGRESS.test(line)) { group = 'progress'; sawSections = true; }
+      else if (line.length <= 60 && SEC_TRANSFER.test(line)) { group = 'transfer'; school = ''; sawSections = true; }
+      else if (/institution credit|courses? taken at (the )?university of montana/i.test(line)) { group = 'um'; school = ''; sawSections = true; }
+      else if (group === 'transfer' && SCHOOL.test(line) && line.length < 90) school = line.replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      // A transfer row with no course number ("M  -  CALCULUS BC=MATH 155OR165  P  5.000"), e.g. AP credit.
+      if (group === 'transfer') { const nc = line.match(/^([A-Z&]{1,5})[\s\t]+-[\s\t]+(.+)$/); if (nc) add('', '', nc[2].split(/[\t ]+/)); }
+      const t = line.match(/\b(autumn|fall|spring|summer|winter)\s+(?:semester\s+|session\s+|quarter\s+)?(\d{4})\b/i); if (t) term = `${t[1][0].toUpperCase()}${t[1].slice(1).toLowerCase()} ${t[2]}`;
       continue;
     }
     // A plain list on one line ("WRIT 101, M 115, PSYX 100S"): each code is its own course.
@@ -116,39 +122,56 @@ function parse(lines, ctx) {
     }
     add(m[1], m[2], line.slice(line.indexOf(m[0]) + m[0].length).split(/[\t ]+/).map(t => t.replace(/[,;]$/, '')).filter(Boolean));
   }
-  return out;
+  return mergeRepeats(out);
 
   // One course: toks is the rest of its row.
-  function add(subj, num, toks) {
-    const code = `${subj} ${num}`;
-    if (NOT_SUBJECT.has(subj)) return;
-    // Read the row from the right: number columns (credits, quality points, GPA),
-    // then the grade, then the title. Reading right-to-left keeps a title ending
-    // in a Roman numeral ("College Writing I") from looking like grade "I".
+  function add(subjRaw, num, toks) {
+    const subj = subjRaw.replace(/\s+/g, ' ');
+    if (subj && NOT_SUBJECT.has(subj)) return;
+    const code = subj ? `${subj} ${num}` : '';
+    // Read the row from the right: an "R" (repeat) flag, number columns (credits,
+    // quality points, GPA), then the grade, then the title. Reading right-to-left keeps
+    // a title ending in a Roman numeral ("College Writing I") from looking like grade "I".
+    if (toks.length > 2 && /^[A-Z]$/.test(toks[toks.length - 1]) && /^\d/.test(toks[toks.length - 2])) toks.pop();
     const nums = [];
     while (toks.length && /^\d{1,3}(\.\d{1,3})?$/.test(toks[toks.length - 1])) nums.unshift(toks.pop());
     let grade = null;
-    if (toks.length > 1 && GRADE.test(toks[toks.length - 1]) && group !== 'progress') grade = toks.pop();
+    const last = toks[toks.length - 1] || '';
+    if (toks.length > 1 && GRADE.test(last) && group !== 'progress') grade = toks.pop();
+    else if (nums.length && GLUED.test(last)) { const g = last.match(GLUED); toks[toks.length - 1] = g[1]; grade = g[2]; }
     const credits = nums.length ? parseFloat(nums[0]) : null;
-    const known = ctx.findCourse(code);
-    // "College Chemistry I" with no grade column: the I belongs to the title.
-    if (grade === 'I' && !nums.length) { toks.push('I'); grade = null; }
-    const titleWords = toks.filter(t => !/^(UG|GR|LD|UD|LDUG|UDUG)$/.test(t));
-    const umSubject = ctx.isUMSubject(subj);
-    // A code from a subject UM doesn't use, with no credits on the line, is probably not a course.
-    if (!umSubject && credits === null && group !== 'transfer') return;
+    if (grade === 'I' && !nums.length) { toks.push('I'); grade = null; }   // "College Chemistry I" with no grade column
+    // Drop a leading level column ("10", "01", "02", "UG") and campus words.
+    while (toks.length && /^(\d{2}|UG|GR|LD|UD|LDUG|UDUG)$/.test(toks[0])) toks.shift();
+    const titleWords = toks.filter(w => !/^(UG|GR|LD|UD|UM|MC|MISSOULA|MSLA|UMM|BITTERROOT)$/i.test(w));
+    const known = code ? ctx.findCourse(code) : null;
+    const umSubject = subj && ctx.isUMSubject(subj);
+    // Without section headings (a pasted list), a code from a subject UM doesn't use is
+    // from another school, and one with no credits on the line probably isn't a course.
     let g = group;
-    if (g === 'um' && !umSubject) g = 'transfer';           // e.g. "ENG 101" — not a UM subject
+    if (!sawSections && g === 'um' && !umSubject) { if (credits === null) return; g = 'transfer'; }
     if (g === 'um' && /^(IP|IN PROGRESS)$/i.test(grade || '')) g = 'progress';
-    const key = `${g}|${code}|${term}`; if (seen.has(key)) return; seen.add(key);
-    // UM courses: use the catalog title (transcript rows mix in campus/level columns).
-    const tTitle = titleCase(titleWords.filter(w => !/^(UM|MC|MISSOULA|MSLA|UMM|BITTERROOT)$/i.test(w)).join(' ').replace(/\s{2,}/g, ' ').trim());
+    const tTitle = titleCase(titleWords.join(' ').replace(/\s{2,}/g, ' ').trim()).replace(/=/g, ' = ').replace(/(\d)\s*or\s*(\d)/gi, '$1 or $2').replace(/\s{2,}/g, ' ');
+    if (!code && !tTitle) return;
     out.push({
       code, title: (g !== 'transfer' && known ? known.title : tTitle) || (known ? known.title : ''),
       credits, grade, noCredit: !!(grade && NO_CREDIT.test(grade)), group: g,
       school: g === 'transfer' ? (school || 'Another school') : '', term, known: !!known,
+      graduate: /^[5-9]\d\d/.test(num || ''),
     });
   }
+}
+// A course taken more than once (a repeat, or a choir every term) appears once:
+// the attempt that earned credit, the latest if several did.
+function mergeRepeats(items) {
+  const best = new Map(), order = [];
+  for (const it of items) {
+    const k = `${it.group}|${it.code || it.title}|${it.group === 'transfer' ? it.school : ''}`;
+    const b = best.get(k);
+    if (!b) { best.set(k, it); order.push(k); }
+    else if (!it.noCredit || b.noCredit) best.set(k, it);
+  }
+  return order.map(k => best.get(k));
 }
 
 window.Transcript = { readFile, parse, _pageLines: pageLines };
